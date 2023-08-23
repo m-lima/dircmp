@@ -12,6 +12,8 @@ enum Error {
     PathUnreadable(std::path::PathBuf, std::io::Error),
     #[error("Failed to write to stdout: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Inconsistent mutal directories found")]
+    InconsistentSize,
 }
 
 fn get_params() -> Result<(String, String)> {
@@ -39,11 +41,10 @@ fn read_dir(dir: &std::path::Path) -> Result<(Vec<std::path::PathBuf>, Vec<std::
         .map_err(|e| Error::PathUnreadable(dir.to_owned(), e))?
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| Error::PathUnreadable(dir.to_owned(), e))?;
-    let (mut dirs, files) = left
+    let (dirs, files) = left
         .into_iter()
         .map(|entry| entry.path())
         .partition::<Vec<_>, _>(|entry| entry.is_dir());
-    dirs.shrink_to_fit();
 
     Ok((dirs, files))
 }
@@ -57,7 +58,16 @@ fn normalize_files(files: Vec<std::path::PathBuf>) -> Vec<std::ffi::OsString> {
     files
 }
 
-fn compare_files(
+fn normalize_dirs(files: Vec<std::path::PathBuf>) -> Vec<(std::ffi::OsString, std::path::PathBuf)> {
+    let mut files = files
+        .into_iter()
+        .filter_map(|p| p.file_name().map(|name| (name.to_os_string(), p.clone())))
+        .collect::<Vec<_>>();
+    files.sort_unstable();
+    files
+}
+
+fn print_diff(
     left: Vec<std::path::PathBuf>,
     right: Vec<std::path::PathBuf>,
     out: &mut impl std::io::Write,
@@ -68,14 +78,14 @@ fn compare_files(
     write!(out, "[33m")?;
     for file in &left {
         if right.binary_search(file).is_err() {
-            writeln!(out, "< {file:?}")?;
+            writeln!(out, "< {}", file.to_string_lossy())?;
         }
     }
 
     write!(out, "[34m")?;
     for file in &right {
         if left.binary_search(file).is_err() {
-            writeln!(out, "> {file:?}")?;
+            writeln!(out, "> {}", file.to_string_lossy())?;
         }
     }
     write!(out, "[m")?;
@@ -83,19 +93,73 @@ fn compare_files(
     Ok(())
 }
 
+fn print_diff_and_get_mutual(
+    left: Vec<std::path::PathBuf>,
+    right: Vec<std::path::PathBuf>,
+    out: &mut impl std::io::Write,
+) -> Result<Vec<(std::path::PathBuf, std::path::PathBuf)>> {
+    let left = normalize_dirs(left);
+    let right = normalize_dirs(right);
+    let mut left_mutual = Vec::new();
+    let mut right_mutual = Vec::new();
+
+    write!(out, "[33m")?;
+    for file in &left {
+        if right
+            .binary_search_by(|(name, _)| name.cmp(&file.0))
+            .is_err()
+        {
+            writeln!(out, "< {}", file.0.to_string_lossy())?;
+        } else {
+            left_mutual.push(file.1.clone());
+        }
+    }
+
+    write!(out, "[34m")?;
+    for file in right {
+        if left
+            .binary_search_by(|(name, _)| name.cmp(&file.0))
+            .is_err()
+        {
+            writeln!(out, "> {}", file.0.to_string_lossy())?;
+        } else {
+            right_mutual.push(file.1);
+        }
+    }
+    write!(out, "[m")?;
+    out.flush()?;
+
+    if left_mutual.len() == right_mutual.len() {
+        let mut mutual = left_mutual
+            .into_iter()
+            .zip(right_mutual.into_iter())
+            .collect::<Vec<_>>();
+        mutual.shrink_to_fit();
+        Ok(mutual)
+    } else {
+        Err(Error::InconsistentSize)
+    }
+}
+
 fn compare_dirs(
     left: &std::path::Path,
     right: &std::path::Path,
     out: &mut impl std::io::Write,
 ) -> Result {
-    let (left_dirs, mut left_files) = read_dir(left)?;
-    let (right_dirs, mut right_files) = read_dir(right)?;
+    let (left_dirs, left_files) = read_dir(left)?;
+    let (right_dirs, right_files) = read_dir(right)?;
 
     writeln!(out, "Comparing")?;
-    writeln!(out, "[33m{:?}", left.as_os_str(),)?;
-    writeln!(out, "[34m{:?}", right.as_os_str())?;
+    writeln!(out, "[33m{}", left.display())?;
+    writeln!(out, "[34m{}", right.display())?;
     writeln!(out, "[m------")?;
-    compare_files(left_files, right_files, out)?;
+    print_diff(left_files, right_files, out)?;
+    let mutual = print_diff_and_get_mutual(left_dirs, right_dirs, out)?;
+
+    for (left, right) in mutual {
+        compare_dirs(&left, &right, out)?;
+    }
+
     Ok(())
 }
 
