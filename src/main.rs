@@ -14,6 +14,8 @@ enum Error {
     Io(#[from] std::io::Error),
     #[error("Inconsistent mutal directories found")]
     InconsistentSize,
+    #[error("Could not read file {0}: {1}")]
+    CannotRead(std::path::PathBuf, std::io::Error),
 }
 
 fn get_params() -> Result<(String, String)> {
@@ -49,22 +51,88 @@ fn read_dir(dir: &std::path::Path) -> Result<(Vec<std::path::PathBuf>, Vec<std::
     Ok((dirs, files))
 }
 
-fn normalize_files(files: Vec<std::path::PathBuf>) -> Vec<std::ffi::OsString> {
+struct NamedPath {
+    name: std::ffi::OsString,
+    path: std::path::PathBuf,
+}
+
+impl std::cmp::Eq for NamedPath {}
+
+impl std::cmp::PartialEq for NamedPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+    }
+}
+
+impl std::cmp::Ord for NamedPath {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl std::cmp::PartialOrd for NamedPath {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::fmt::Display for NamedPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.name.to_string_lossy(), f)
+    }
+}
+
+fn sort_path_names(files: Vec<std::path::PathBuf>) -> Vec<NamedPath> {
     let mut files = files
         .into_iter()
-        .filter_map(|p| p.file_name().map(std::ffi::OsStr::to_os_string))
+        .filter_map(|p| {
+            p.file_name().map(|name| NamedPath {
+                name: name.to_os_string(),
+                path: p.clone(),
+            })
+        })
         .collect::<Vec<_>>();
     files.sort_unstable();
     files
 }
 
-fn normalize_dirs(files: Vec<std::path::PathBuf>) -> Vec<(std::ffi::OsString, std::path::PathBuf)> {
-    let mut files = files
-        .into_iter()
-        .filter_map(|p| p.file_name().map(|name| (name.to_os_string(), p.clone())))
-        .collect::<Vec<_>>();
-    files.sort_unstable();
-    files
+fn compare_files(left: &NamedPath, right: &NamedPath, out: &mut impl std::io::Write) -> Result {
+    use std::io::Read;
+
+    let mut left_file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(false)
+        .create(false)
+        .open(&left.path)
+        .map_err(|e| Error::CannotRead(left.path.clone(), e))?;
+
+    let mut right_file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(false)
+        .create(false)
+        .open(&right.path)
+        .map_err(|e| Error::CannotRead(right.path.clone(), e))?;
+
+    let mut left_buffer = [0; 1024 * 4];
+    let mut right_buffer = [0; 1024 * 4];
+
+    loop {
+        let left_read = left_file
+            .read(&mut left_buffer)
+            .map_err(|e| Error::CannotRead(left.path.clone(), e))?;
+        let right_read = right_file
+            .read(&mut right_buffer)
+            .map_err(|e| Error::CannotRead(right.path.clone(), e))?;
+
+        if left_buffer[..left_read] != right_buffer[..right_read] {
+            writeln!(out, "[31m# Mismatch {left} <> {right}[m",)?;
+            break Ok(());
+        }
+
+        if left_read == 0 {
+            break Ok(());
+        }
+    }
 }
 
 fn print_diff(
@@ -72,22 +140,26 @@ fn print_diff(
     right: Vec<std::path::PathBuf>,
     out: &mut impl std::io::Write,
 ) -> Result {
-    let left = normalize_files(left);
-    let right = normalize_files(right);
+    let left = sort_path_names(left);
+    let right = sort_path_names(right);
 
     write!(out, "[33m")?;
     for file in &left {
         if right.binary_search(file).is_err() {
-            writeln!(out, "< {}", file.to_string_lossy())?;
+            writeln!(out, "< {file}")?;
         }
     }
 
     write!(out, "[34m")?;
     for file in &right {
-        if left.binary_search(file).is_err() {
-            writeln!(out, "> {}", file.to_string_lossy())?;
+        if let Ok(index) = left.binary_search(file) {
+            let left = unsafe { left.get_unchecked(index) };
+            compare_files(left, file, out)?;
+        } else {
+            writeln!(out, "> {file}")?;
         }
     }
+
     write!(out, "[m")?;
     out.flush()?;
     Ok(())
@@ -98,32 +170,26 @@ fn print_diff_and_get_mutual(
     right: Vec<std::path::PathBuf>,
     out: &mut impl std::io::Write,
 ) -> Result<Vec<(std::path::PathBuf, std::path::PathBuf)>> {
-    let left = normalize_dirs(left);
-    let right = normalize_dirs(right);
+    let left = sort_path_names(left);
+    let right = sort_path_names(right);
     let mut left_mutual = Vec::new();
     let mut right_mutual = Vec::new();
 
     write!(out, "[33m")?;
-    for file in &left {
-        if right
-            .binary_search_by(|(name, _)| name.cmp(&file.0))
-            .is_err()
-        {
-            writeln!(out, "< {}", file.0.to_string_lossy())?;
+    for dir in &left {
+        if right.binary_search(dir).is_err() {
+            writeln!(out, "< {dir}")?;
         } else {
-            left_mutual.push(file.1.clone());
+            left_mutual.push(dir.path.clone());
         }
     }
 
     write!(out, "[34m")?;
-    for file in right {
-        if left
-            .binary_search_by(|(name, _)| name.cmp(&file.0))
-            .is_err()
-        {
-            writeln!(out, "> {}", file.0.to_string_lossy())?;
+    for dir in right {
+        if left.binary_search(&dir).is_err() {
+            writeln!(out, "> {dir}")?;
         } else {
-            right_mutual.push(file.1);
+            right_mutual.push(dir.path);
         }
     }
     write!(out, "[m")?;
