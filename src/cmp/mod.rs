@@ -1,31 +1,125 @@
 mod path;
+mod sorted_vec;
 
 use crate::{Error, Result};
 
-pub fn dirs(left: &std::path::Path, right: &std::path::Path) -> Result<(path::Dir, path::Dir)> {
-    let left_name = path::name(left)?;
-    let right_name = path::name(right)?;
-    let (left_dirs, left_files) = read_dir(left)?;
-    let (right_dirs, right_files) = read_dir(right)?;
+pub fn dirs(left: &std::path::Path, right: &std::path::Path) -> Result<path::Status> {
+    match (left.exists(), right.exists()) {
+        (false, false) => Err(Error::TwoMissingFiles(
+            left.to_path_buf(),
+            right.to_path_buf(),
+        )),
+        (true, false) => Ok(path::Status::MissingRight),
+        (false, true) => Ok(path::Status::MissingLeft),
+        (true, true) => {
+            let (left_dirs, left_files) = split_dir(left)?;
+            let (right_dirs, right_files) = split_dir(right)?;
 
-    let files = dir_files(left, left_files, right, right_files)?;
+            let files = dir_files(left_files, right_files)?;
+            let dirs = dir_dirs(left_dirs, right_dirs)?;
 
-    todo!()
+            let mut children = Vec::with_capacity(files.len() + dirs.len());
+
+            children.extend(files.into_iter().map(path::Path::File));
+            children.extend(dirs.into_iter().map(path::Path::Dir));
+
+            todo!()
+        }
+    }
 }
 
-fn read_dir(dir: &std::path::Path) -> Result<(Vec<std::path::PathBuf>, Vec<String>)> {
-    let dir = dir
+pub fn files(left: &std::path::Path, right: &std::path::Path) -> Result<path::Status> {
+    use std::io::Read;
+
+    match (left.exists(), right.exists()) {
+        (false, false) => Err(Error::TwoMissingFiles(
+            left.to_path_buf(),
+            right.to_path_buf(),
+        )),
+        (true, false) => Ok(path::Status::MissingRight),
+        (false, true) => Ok(path::Status::MissingLeft),
+        (true, true) => {
+            let mut left_file = match std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .create(false)
+                .open(left)
+            {
+                Ok(left) => left,
+                Err(e) => return Err(Error::CannotRead(left.to_path_buf(), e)),
+            };
+
+            let mut right_file = match std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .create(false)
+                .open(right)
+            {
+                Ok(right) => right,
+                Err(e) => return Err(Error::CannotRead(right.to_path_buf(), e)),
+            };
+
+            let mut left_buffer = [0; 1024 * 4];
+            let mut right_buffer = [0; 1024 * 4];
+
+            loop {
+                let left_read = match left_file.read(&mut left_buffer) {
+                    Ok(r) => r,
+                    Err(e) => break Err(Error::CannotRead(left.to_path_buf(), e)),
+                };
+                let right_read = match right_file.read(&mut right_buffer) {
+                    Ok(r) => r,
+                    Err(e) => break Err(Error::CannotRead(right.to_path_buf(), e)),
+                };
+
+                if left_buffer[..left_read] != right_buffer[..right_read] {
+                    break Ok(path::Status::Partial);
+                }
+
+                if left_read == 0 {
+                    break Ok(path::Status::Equal);
+                }
+            }
+        }
+    }
+}
+
+fn dirs_internal(
+    left: &std::path::Path,
+    right: &std::path::Path,
+    name: std::ffi::OsString,
+) -> Result<path::Dir> {
+    dirs(&left.join(&name), &right.join(&name)).map(|status| path::Dir {
+        name: path::stringify(name),
+        status,
+        children: Vec::new(),
+    })
+}
+
+fn files_internal(
+    left: &std::path::Path,
+    right: &std::path::Path,
+    name: std::ffi::OsString,
+) -> Result<path::File> {
+    files(&left.join(&name), &right.join(&name)).map(|status| path::File {
+        name: path::stringify(name),
+        status,
+    })
+}
+
+fn split_dir(parent: &std::path::Path) -> Result<(path::Paths, path::Paths)> {
+    let dir = parent
         .read_dir()
-        .map_err(|e| Error::PathUnreadable(dir.to_owned(), e))?
+        .map_err(|e| Error::PathUnreadable(parent.to_path_buf(), e))?
         .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| Error::PathUnreadable(dir.to_owned(), e))?;
+        .map_err(|e| Error::PathUnreadable(parent.to_path_buf(), e))?;
 
     let mut entries = Vec::with_capacity(dir.len());
     let mut dir_count = 0;
 
     for entry in dir {
         let path = entry.path();
-        let name = String::from(entry.file_name().to_string_lossy());
+        let name = entry.file_name();
         if path.is_dir() {
             dir_count += 1;
         }
@@ -37,130 +131,88 @@ fn read_dir(dir: &std::path::Path) -> Result<(Vec<std::path::PathBuf>, Vec<Strin
 
     for (path, name) in entries {
         if path.is_dir() {
-            dirs.push(path);
+            dirs.push(name);
         } else {
             files.push(name);
         }
     }
 
+    let dirs = path::Paths {
+        parent: std::path::PathBuf::from(parent),
+        paths: dirs,
+    };
+
+    let files = path::Paths {
+        parent: std::path::PathBuf::from(parent),
+        paths: files,
+    };
+
     Ok((dirs, files))
 }
 
 fn dir_files(
-    left_parent: &std::path::Path,
-    left: Vec<String>,
-    right_parent: &std::path::Path,
-    right: Vec<String>,
+    prefix: std::path::PathBuf,
+    left: path::Paths,
+    right: path::Paths,
 ) -> Result<Vec<path::File>> {
-    if left.is_empty() {
-        return right
-            .into_iter()
-            .map(path::name)
-            .map(|result| {
-                result.map(|name| path::File {
-                    name,
-                    status: path::Status::MissingLeft,
-                })
-            })
-            .collect();
+    if left.paths.is_empty() {
+        return Ok(make_missing(right, |name| path::File {
+            name,
+            status: path::Status::MissingLeft,
+        }));
     }
 
-    if right.is_empty() {
-        return left
-            .into_iter()
-            .map(path::name)
-            .map(|result| {
-                result.map(|name| path::File {
-                    name,
-                    status: path::Status::MissingRight,
-                })
-            })
-            .collect();
+    if right.paths.is_empty() {
+        return Ok(make_missing(left, |name| path::File {
+            name,
+            status: path::Status::MissingRight,
+        }));
     }
 
-    let mut names = left;
-    names.sort_unstable();
-
-    for name in right
-        .into_iter()
-        .map(path::name)
-        .collect::<Result<Vec<_>>>()?
-    {
-        if let Err(index) = names.binary_search(&name) {
-            names.insert(index, name);
-        }
-    }
+    let left_files = sorted_vec::SortedVec::new(left.paths);
+    let right_files = sorted_vec::SortedVec::new(right.paths);
+    let names = left_files.merge(right_files);
 
     names
-        .into_iter()
-        .map(|name| files(left_parent, right_parent, name))
+        .to_iter()
+        .map(|name| files_internal(&left.parent, &right.parent, name))
         .collect()
 }
 
-pub fn files(left: &std::path::Path, right: &std::path::Path, name: String) -> Result<path::File> {
-    use std::io::Read;
-
-    let left = left.join(&name);
-    let right = right.join(&name);
-
-    match (left.exists(), right.exists()) {
-        (false, false) => Err(Error::TwoMissingFiles(left, right)),
-        (true, false) => Ok(path::File {
-            name,
-            status: path::Status::MissingRight,
-        }),
-        (false, true) => Ok(path::File {
+fn dir_dirs(left: path::Paths, right: path::Paths) -> Result<Vec<path::Dir>> {
+    if left.paths.is_empty() {
+        return Ok(make_missing(right, |name| path::Dir {
             name,
             status: path::Status::MissingLeft,
-        }),
-        (true, true) => {
-            let mut left_file = match std::fs::OpenOptions::new()
-                .read(true)
-                .write(false)
-                .create(false)
-                .open(&left)
-            {
-                Ok(left) => left,
-                Err(e) => return Err(Error::CannotRead(left, e)),
-            };
-
-            let mut right_file = match std::fs::OpenOptions::new()
-                .read(true)
-                .write(false)
-                .create(false)
-                .open(&right)
-            {
-                Ok(right) => right,
-                Err(e) => return Err(Error::CannotRead(right, e)),
-            };
-
-            let mut left_buffer = [0; 1024 * 4];
-            let mut right_buffer = [0; 1024 * 4];
-
-            loop {
-                let left_read = match left_file.read(&mut left_buffer) {
-                    Ok(r) => r,
-                    Err(e) => break Err(Error::CannotRead(left, e)),
-                };
-                let right_read = match right_file.read(&mut right_buffer) {
-                    Ok(r) => r,
-                    Err(e) => break Err(Error::CannotRead(right, e)),
-                };
-
-                if left_buffer[..left_read] != right_buffer[..right_read] {
-                    break Ok(path::File {
-                        name,
-                        status: path::Status::Partial,
-                    });
-                }
-
-                if left_read == 0 {
-                    break Ok(path::File {
-                        name,
-                        status: path::Status::Equal,
-                    });
-                }
-            }
-        }
+            // TODO: Populate these guys
+            children: Vec::new(),
+        }));
     }
+
+    if right.paths.is_empty() {
+        return Ok(make_missing(left, |name| path::Dir {
+            name,
+            status: path::Status::MissingRight,
+            // TODO: Populate these guys
+            children: Vec::new(),
+        }));
+    }
+
+    let left_files = sorted_vec::SortedVec::new(left.paths);
+    let right_files = sorted_vec::SortedVec::new(right.paths);
+    let names = left_files.merge(right_files);
+
+    names
+        .to_iter()
+        .map(|name| dirs_internal(&left.parent, &right.parent, name))
+        .collect()
+}
+
+fn make_missing<T, F: Fn(String) -> T>(paths: path::Paths, f: F) -> Vec<T> {
+    paths
+        .paths
+        .into_iter()
+        .map(path::stringify)
+        .map(f)
+        .collect()
 }

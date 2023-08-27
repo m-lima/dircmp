@@ -22,6 +22,6 @@ pub enum Error {
     InconsistentSize,
     #[error("Could not read file {0}: {1}")]
     CannotRead(std::path::PathBuf, std::io::Error),
-    #[error("Encountered inconsistent state: Both files are missing: `{0}` `{1}`")]
+    #[error("Both path do not exist: `{0}` `{1}`")]
     TwoMissingFiles(std::path::PathBuf, std::path::PathBuf),
 }
