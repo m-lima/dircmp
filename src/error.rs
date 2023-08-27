@@ -24,4 +24,18 @@ pub enum Error {
     CannotRead(std::path::PathBuf, std::io::Error),
     #[error("Both path do not exist: `{0}` `{1}`")]
     TwoMissingFiles(std::path::PathBuf, std::path::PathBuf),
+    #[error("Fatal error: {0}")]
+    Fatal(#[from] Fatal),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Fatal {
+    #[error("Failed to send hash from crawler thread")]
+    SendHash,
+    #[error("Failed to send error from crawler thread: {0}")]
+    SendError(String),
+    #[error("Error in spawned thread")]
+    JoinError(Box<dyn std::any::Any + Send + 'static>),
+    #[error("Full collision detected for `{0}`")]
+    FullCollision(std::path::PathBuf),
 }

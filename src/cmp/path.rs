@@ -1,4 +1,17 @@
+use crate::error;
 use crate::{Error, Result};
+
+pub fn strip_shared<'a>(
+    shared: &std::path::Path,
+    path: &'a std::path::Path,
+) -> Result<&'a std::path::Path> {
+    path.strip_prefix(shared).map_err(|_| {
+        Error::Fatal(error::Fatal::PrefixNotFound(
+            shared.to_path_buf(),
+            path.to_path_buf(),
+        ))
+    })
+}
 
 pub fn name<P: AsRef<std::path::Path>>(path: P) -> Result<std::ffi::OsString> {
     path.as_ref()
@@ -40,7 +53,12 @@ pub struct Dir {
 }
 
 pub struct File {
-    pub name: std::path::PathBuf,
+    pub path: std::path::PathBuf,
+    pub status: Status,
+}
+
+pub struct PathStatus {
+    pub path: std::path::PathBuf,
     pub status: Status,
 }
 
@@ -48,8 +66,7 @@ pub struct File {
 pub enum Status {
     Equal,
     Partial,
-    MissingLeft,
-    MissingRight,
+    Missing,
 }
 
 // trait NamedStatus {
@@ -95,5 +112,5 @@ pub enum Status {
 
 pub struct Paths {
     pub parent: std::path::PathBuf,
-    pub paths: Vec<std::ffi::OsString>,
+    pub names: Vec<std::ffi::OsString>,
 }

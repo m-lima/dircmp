@@ -1,13 +1,16 @@
-mod cmp;
+// mod cmp;
 mod error;
+mod hasher;
 
-use error::{Error, Result};
+use error::{Error, Fatal, Result};
 
 fn main() -> std::process::ExitCode {
+    let start = std::time::Instant::now();
     if let Err(e) = fallible_main() {
         eprintln!("[31mERROR[m {e}");
         1
     } else {
+        eprintln!("Elapsed: {:?}", start.elapsed());
         0
     }
     .into()
@@ -15,12 +18,16 @@ fn main() -> std::process::ExitCode {
 
 fn fallible_main() -> Result {
     let (left, right) = get_params()?;
-    cmp::dirs(&left, &right)?;
+    let pool = threadpool::ThreadPool::new(num_cpus::get());
+    let mut left = hasher::DirIndex::new(&left, &pool)?;
+    // println!("{:?}", left.last());
+    // println!("{:?}", left.pop(10));
+    println!("{}", left.len());
     Ok(())
 }
 
 fn get_params() -> Result<(std::path::PathBuf, std::path::PathBuf)> {
-    let mut args = std::env::args().skip(1);
+    let mut args = std::env::args_os().skip(1);
 
     let left = args
         .next()
@@ -35,7 +42,7 @@ fn get_params() -> Result<(std::path::PathBuf, std::path::PathBuf)> {
     Ok((left, right))
 }
 
-fn to_dir_path(path: String) -> Result<std::path::PathBuf> {
+fn to_dir_path(path: std::ffi::OsString) -> Result<std::path::PathBuf> {
     let path = std::path::PathBuf::from(path);
 
     if !path.exists() {
