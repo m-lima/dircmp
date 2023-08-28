@@ -36,7 +36,6 @@ name = "dircmp"
 version = "0.1.0"
 dependencies = [
  "md-5",
- "num_cpus",
  "thiserror",
  "threadpool",
 ]
