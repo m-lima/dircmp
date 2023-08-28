@@ -18,9 +18,9 @@ fn main() -> std::process::ExitCode {
 fn fallible_main() -> error::Result {
     let (left, right, verbose) = args::get()?;
     let pool = thread::pool(verbose);
-    // let left_index = hasher::DirIndex::new(&left, &pool)?;
-    // let right_index = hasher::DirIndex::new(&right, &pool)?;
-    // println!("{}", left_index.len());
-    // println!("{}", right_index.len());
+    let left = hasher::Index::new(left, &pool)?;
+    let right = hasher::Index::new(right, &pool)?;
+    println!("{}: {}", left.path().display(), left.len());
+    println!("{}: {}", right.path().display(), right.len());
     Ok(())
 }

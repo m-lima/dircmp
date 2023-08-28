@@ -9,25 +9,28 @@ pub enum Error {
     #[error("Full collision detected for `{0}`")]
     FullCollision(std::path::PathBuf),
     #[error(transparent)]
-    ThreadPanic(crate::thread::ThreadPanic),
+    ThreadPanic(crate::thread::Panic),
 }
 
-pub struct DirIndex {
+pub struct Index {
+    path: std::path::PathBuf,
     children: Vec<Entry>,
 }
 
-impl DirIndex {
+impl Index {
     pub fn new(path: std::path::PathBuf, pool: &threadpool::ThreadPool) -> Result<Self, Error> {
-        let accumulator = init(path, pool)?;
+        let accumulator = init(path.clone(), pool)?;
 
         let children = accumulator
             .join()
-            .map_err(|e| {
-                Error::ThreadPanic(crate::thread::ThreadPanic(String::from("accumulator"), e))
-            })
+            .map_err(|e| Error::ThreadPanic(crate::thread::Panic(String::from("accumulator"), e)))
             .map_err(Error::from)??;
 
-        Ok(Self { children })
+        Ok(Self { path, children })
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
     }
 
     pub fn len(&self) -> usize {
@@ -49,7 +52,6 @@ fn init(
 
 fn accumulate(
     receiver: std::sync::mpsc::Receiver<Result<Entry, crawler::Error>>,
-    // TODO: Can this be a ref?
     base: std::path::PathBuf,
     verbose: bool,
 ) -> Result<Vec<Entry>, Error> {
@@ -92,7 +94,7 @@ mod crawler {
         #[error("Could not read directory entry for `{0}`: {1}")]
         EntryUnreadable(std::path::PathBuf, std::io::Error),
         #[error("Entry: {0}")]
-        SendError(std::path::PathBuf),
+        Send(std::path::PathBuf),
     }
 
     pub fn crawl(
@@ -103,7 +105,7 @@ mod crawler {
         macro_rules! send {
             ($value: expr) => {
                 sender.send($value).map_err(|e| match e.0 {
-                    Ok((_, path)) => Error::SendError(path),
+                    Ok((_, path)) => Error::Send(path),
                     Err(e) => e,
                 })
             };
@@ -167,10 +169,10 @@ mod crawler {
         sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
         pool: threadpool::ThreadPool,
     ) {
-        if let Err(e) = crawl(&path, sender, pool) {
+        if let Err(e) = crawl(path, sender, pool) {
             match e {
-                Error::SendError(path) => {
-                    eprintln!("Failed to send entry from crawler: {}", path.display())
+                Error::Send(path) => {
+                    eprintln!("Failed to send entry from crawler: {}", path.display());
                 }
                 e => eprintln!("Failed to send error from crawler: {e}"),
             }

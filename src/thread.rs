@@ -4,7 +4,7 @@
 
 #[derive(Debug, thiserror::Error)]
 #[error("Panic in spawned thread ({0}): {1:?}")]
-pub struct ThreadPanic(pub String, pub Box<dyn std::any::Any + Send + 'static>);
+pub struct Panic(pub String, pub Box<dyn std::any::Any + Send + 'static>);
 
 // TODO: Use rayon
 pub fn pool(verbose: bool) -> threadpool::ThreadPool {
