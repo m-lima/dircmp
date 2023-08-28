@@ -1,16 +1,14 @@
-// #[derive(Debug, thiserror::Error)]
-// #[error("Failed to create thread pool: {0}")]
-// pub struct Error(#[from] threadpool::ThreadPoolBuildError);
-
 #[derive(Debug, thiserror::Error)]
-#[error("Panic in spawned thread ({0}): {1:?}")]
-pub struct Panic(pub String, pub Box<dyn std::any::Any + Send + 'static>);
+#[error("Failed to create thread pool: {0}")]
+pub struct Error(#[from] rayon::ThreadPoolBuildError);
 
-// TODO: Use rayon
-pub fn pool(verbose: bool) -> threadpool::ThreadPool {
-    let pool = threadpool::Builder::new().build();
+pub fn pool(verbose: bool) -> Result<rayon::ThreadPool, Error> {
+    let pool = rayon::ThreadPoolBuilder::new().build()?;
     if verbose {
-        eprintln!("Creating thread pool with {} threads", pool.max_count());
+        eprintln!(
+            "Creating thread pool with {} threads",
+            pool.current_num_threads()
+        );
     }
-    pool
+    Ok(pool)
 }

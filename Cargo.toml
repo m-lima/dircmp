@@ -5,11 +5,10 @@ edition = "2021"
 
 [dependencies]
 md-5 = "0.10.5"
+rayon = "1.7.0"
 thiserror = "1.0.47"
-threadpool = "1.8.1"
 
 # TODO: Dependencies
 # clap = { version = "4.4.0", features = ["derive"] }
 # log = "0.4.20"
-# rayon = "1.7.0"
 # simplelog = "0.12.1"

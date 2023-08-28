@@ -8,8 +8,6 @@ pub enum Error {
     StripPrefix(std::path::PathBuf, std::path::PathBuf),
     #[error("Full collision detected for `{0}`")]
     FullCollision(std::path::PathBuf),
-    #[error(transparent)]
-    ThreadPanic(crate::thread::Panic),
 }
 
 pub struct Index {
@@ -18,14 +16,8 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn new(path: std::path::PathBuf, pool: &threadpool::ThreadPool) -> Result<Self, Error> {
-        let accumulator = init(path.clone(), pool)?;
-
-        let children = accumulator
-            .join()
-            .map_err(|e| Error::ThreadPanic(crate::thread::Panic(String::from("accumulator"), e)))
-            .map_err(Error::from)??;
-
+    pub fn new(path: std::path::PathBuf, pool: &rayon::ThreadPool) -> Result<Self, Error> {
+        let children = pool.install(|| init(&path))?;
         Ok(Self { path, children })
     }
 
@@ -38,21 +30,15 @@ impl Index {
     }
 }
 
-fn init(
-    path: std::path::PathBuf,
-    pool: &threadpool::ThreadPool,
-) -> Result<std::thread::JoinHandle<Result<Vec<Entry>, Error>>, Error> {
+fn init(path: &std::path::Path) -> Result<Vec<Entry>, Error> {
     let (sender, receiver) = std::sync::mpsc::channel();
-
-    crawler::crawl(&path, sender.clone(), pool.clone())?;
-    let accumulator = std::thread::spawn(move || accumulate(receiver, path, true));
-
-    Ok(accumulator)
+    crawler::crawl(path, sender)?;
+    accumulate(&receiver, path, true)
 }
 
 fn accumulate(
-    receiver: std::sync::mpsc::Receiver<Result<Entry, crawler::Error>>,
-    base: std::path::PathBuf,
+    receiver: &std::sync::mpsc::Receiver<Result<Entry, crawler::Error>>,
+    base: &std::path::Path,
     verbose: bool,
 ) -> Result<Vec<Entry>, Error> {
     let mut paths = Vec::new();
@@ -60,9 +46,9 @@ fn accumulate(
         let entry = match result {
             Ok((hash, path)) => (
                 hash,
-                match path.strip_prefix(&base) {
+                match path.strip_prefix(base) {
                     Ok(path) => path.to_path_buf(),
-                    Err(_) => return Err(Error::StripPrefix(base, path)),
+                    Err(_) => return Err(Error::StripPrefix(base.to_path_buf(), path)),
                 },
             ),
             Err(e) => return Err(Error::Crawler(e)),
@@ -78,7 +64,6 @@ fn accumulate(
         }
     }
 
-    drop(receiver);
     Ok(paths)
 }
 
@@ -100,7 +85,6 @@ mod crawler {
     pub fn crawl(
         path: &std::path::Path,
         sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
-        pool: threadpool::ThreadPool,
     ) -> std::result::Result<(), Error> {
         macro_rules! send {
             ($value: expr) => {
@@ -119,8 +103,7 @@ mod crawler {
         for path in dir {
             if path.is_dir() {
                 let sender = sender.clone();
-                let pool_handle = pool.clone();
-                pool.execute(move || crawl_internal(&path, sender.clone(), pool_handle));
+                rayon::spawn(move || crawl_internal(&path, sender.clone()));
             } else {
                 use md5::Digest;
 
@@ -160,16 +143,14 @@ mod crawler {
         }
 
         drop(sender);
-        drop(pool);
         Ok(())
     }
 
     pub fn crawl_internal(
         path: &std::path::Path,
         sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
-        pool: threadpool::ThreadPool,
     ) {
-        if let Err(e) = crawl(path, sender, pool) {
+        if let Err(e) = crawl(path, sender) {
             match e {
                 Error::Send(path) => {
                     eprintln!("Failed to send entry from crawler: {}", path.display());
