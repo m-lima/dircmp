@@ -11,8 +11,8 @@ pub enum Error {
 }
 
 pub struct Index {
-    path: std::path::PathBuf,
-    children: Vec<entry::Entry>,
+    pub(crate) path: std::path::PathBuf,
+    pub(crate) children: Vec<entry::Entry>,
 }
 
 impl Index {
@@ -43,41 +43,6 @@ impl Index {
         );
 
         Ok(Self { path, children })
-    }
-
-    pub(crate) fn compare(&mut self, other: &Self, pool: &rayon::ThreadPool) {
-        use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-
-        pool.install(|| {
-            self.children.par_iter_mut().for_each(|entry| {
-                match other.children.binary_search(entry) {
-                    Ok(i) => entry.status = entry::Status::Same(i),
-                    Err(i) => {
-                        let mut hash = entry.hash;
-                        for byte in hash.iter_mut().rev().skip_while(|b| **b == 0).take(1) {
-                            *byte -= 1;
-                        }
-                        let i = match other.children[..i].binary_search_by(|e| e.hash.cmp(&hash)) {
-                            Ok(i) | Err(i) => i,
-                        };
-                        let indices = other.children[i..]
-                            .iter()
-                            .take_while(|e| e.hash == entry.hash)
-                            .enumerate()
-                            .map(|(idx, _)| idx + i)
-                            .collect::<Vec<_>>();
-                        match indices.len() {
-                            0 => entry.status = entry::Status::Unique,
-                            1 => {
-                                entry.status =
-                                    entry::Status::Moved(unsafe { *indices.get_unchecked(0) });
-                            }
-                            _ => entry.status = entry::Status::Hash(indices),
-                        }
-                    }
-                }
-            });
-        });
     }
 }
 
@@ -178,7 +143,7 @@ mod crawler {
                     hasher.update(&buffer[..bytes]);
                 }
 
-                send!(Ok((hasher.finalize().into(), path)))?;
+                send!(Ok((super::entry::Hash::new(hasher.finalize()), path)))?;
             }
         }
 

@@ -1,5 +1,3 @@
-pub type Hash = [u8; 16];
-
 #[derive(Debug, Eq, PartialEq)]
 pub struct Entry {
     pub(crate) hash: Hash,
@@ -55,11 +53,29 @@ impl std::cmp::PartialOrd for Entry {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Hash([u8; 16]);
+
+impl Hash {
+    pub(crate) fn new(array: impl Into<[u8; 16]>) -> Self {
+        Self(array.into())
+    }
+
+    pub(crate) fn decrement(&self) -> Self {
+        let mut hash = self.0;
+        for byte in hash.iter_mut().rev().skip_while(|b| **b == 0).take(1) {
+            *byte -= 1;
+        }
+        Self(hash)
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Status {
     Same(usize),
     Moved(usize),
-    Hash(Vec<usize>),
+    Modified(usize),
+    Maybe(Vec<usize>),
     Unique,
 }
 
@@ -68,8 +84,9 @@ impl Status {
         match self {
             Status::Same(_) => 0,
             Status::Moved(_) => 1,
-            Status::Hash(_) => 2,
-            Status::Unique => 3,
+            Status::Modified(_) => 2,
+            Status::Maybe(_) => 3,
+            Status::Unique => 4,
         }
     }
 }

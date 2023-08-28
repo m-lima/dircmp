@@ -49,30 +49,35 @@ fn fallible_run(left: std::path::PathBuf, right: std::path::PathBuf) -> Result<(
 }
 
 fn print(reference: &dircmp::Index, other: &dircmp::Index, skip: bool) {
-    println!("{}", reference.path().display());
+    println!("[37mVisiting:[m {}", reference.path().display());
     for index in reference.children() {
         match index.status() {
             dircmp::Status::Same(_) => {
                 if !skip {
-                    println!("[32mMATCHES[m");
-                    println!("[32m└[m {}", index.path().display());
+                    println!("[32mMATCHES[m  {}", index.path().display());
                 }
             }
             dircmp::Status::Moved(i) => {
                 if !skip {
-                    println!("[33mMOVED");
-                    println!("[33m┌[m {}", index.path().display());
+                    println!("[33mMOVED[m    {}", index.path().display());
                     println!("[33m└[m {}", unsafe {
                         other.children().get_unchecked(*i).path().display()
                     });
                 }
             }
-            dircmp::Status::Hash(indices) => {
+            dircmp::Status::Modified(i) => {
+                if !skip {
+                    println!("[35mMODIFIED[m {}", index.path().display());
+                    println!("[35m└[m {}", unsafe {
+                        other.children().get_unchecked(*i).path().display()
+                    });
+                }
+            }
+            dircmp::Status::Maybe(indices) => {
                 let Some((tail, head)) = indices.split_last() else {
                     continue;
                 };
-                println!("[34mMAYBE");
-                println!("[34m╱[m {}", index.path().display());
+                println!("[34mMAYBE[m    {}", index.path().display());
                 for i in head {
                     println!("[34m├[m {}", unsafe {
                         other.children().get_unchecked(*i).path().display()
@@ -83,8 +88,7 @@ fn print(reference: &dircmp::Index, other: &dircmp::Index, skip: bool) {
                 });
             }
             dircmp::Status::Unique => {
-                println!("[31mUNIQUE[m");
-                println!("[31m└[m {}", index.path().display());
+                println!("[31mUNIQUE[m   {}", index.path().display());
             }
         }
     }
