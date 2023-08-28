@@ -34,6 +34,9 @@ pub struct Args {
     /// Verbosity level
     #[arg(short, action = clap::ArgAction::Count)]
     pub verbosity: u8,
+    /// Show matched items
+    #[arg(short, long)]
+    pub matched: bool,
     /// Path to the `left` directory to compare
     #[arg(value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), parse_dir))]
     pub left: std::path::PathBuf,
