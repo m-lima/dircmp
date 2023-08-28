@@ -94,7 +94,7 @@ mod crawler {
     pub fn crawl(
         path: &std::path::Path,
         sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
-    ) -> std::result::Result<(), Error> {
+    ) -> Result<(), Error> {
         macro_rules! send {
             ($value: expr) => {
                 sender.send($value).map_err(|e| match e.0 {
@@ -169,7 +169,7 @@ mod crawler {
         path.read_dir()
             .map_err(|e| Error::DirUnreadable(path.to_path_buf(), e))?
             .map(|entry| entry.map(|p| p.path()))
-            .collect::<std::result::Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| Error::EntryUnreadable(path.to_path_buf(), e))
     }
 }
