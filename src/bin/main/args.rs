@@ -6,19 +6,27 @@ enum Error {
     PathNotDir,
 }
 
-pub fn parse() -> App {
-    <App as clap::Parser>::parse()
+pub fn parse() -> Option<Args> {
+    <App as clap::Parser>::parse().cli.map(Command::args)
 }
 
 #[derive(Debug, clap::Parser)]
-pub struct App {
+struct App {
     #[command(subcommand)]
     pub cli: Option<Command>,
 }
 
 #[derive(Debug, clap::Subcommand)]
-pub enum Command {
+enum Command {
     Cli(Args),
+}
+
+impl Command {
+    fn args(self) -> Args {
+        match self {
+            Command::Cli(args) => args,
+        }
+    }
 }
 
 #[derive(Debug, clap::Args)]
