@@ -7,7 +7,7 @@ fn main() -> std::process::ExitCode {
     let start = std::time::Instant::now();
     let args = args::parse();
 
-    if let Err(e) = init_logger(args.verbosity) {
+    if let Err(e) = init_logger(args.verbosity()) {
         eprintln!("[31merror:[m {e}");
         return std::process::ExitCode::FAILURE;
     }
@@ -24,7 +24,10 @@ fn main() -> std::process::ExitCode {
 fn init_logger(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
     simplelog::TermLogger::init(
         level,
-        match simplelog::ConfigBuilder::default().set_time_offset_to_local() {
+        match simplelog::ConfigBuilder::default()
+            .set_target_level(log::LevelFilter::Error)
+            .set_time_offset_to_local()
+        {
             Ok(b) => b.set_time_format_custom(simplelog::format_description!(
                 "[year]-[month]-[day]T[hour]:[minute]:[second]"
             )),
@@ -35,7 +38,9 @@ fn init_logger(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
         .build(),
         simplelog::TerminalMode::Stderr,
         simplelog::ColorChoice::Auto,
-    )
+    )?;
+    log::info!("Log level set to {level}");
+    Ok(())
 }
 
 fn fallible_main(args: args::Args) -> error::Result {

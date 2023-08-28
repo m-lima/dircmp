@@ -1,33 +1,47 @@
-pub fn parse() -> Args {
-    <Args as structopt::StructOpt>::from_args()
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Path does not exist")]
+    PathDoesNotExist,
+    #[error("Path is not a directory")]
+    PathNotDir,
 }
 
-#[derive(Debug, structopt::StructOpt)]
+pub fn parse() -> Args {
+    <Args as clap::Parser>::parse()
+}
+
+#[derive(Debug, clap::Parser)]
 pub struct Args {
     /// Verbosity level
-    #[structopt(short, parse(from_occurrences = to_verbosity))]
-    pub verbosity: log::LevelFilter,
+    #[arg(short, action = clap::ArgAction::Count)]
+    pub verbosity: u8,
     /// Path to the `left` directory to compare
-    #[structopt(parse(try_from_os_str = parse_dir))]
+    #[arg(value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), parse_dir))]
     pub left: std::path::PathBuf,
     /// Path to the `right` directory to compare
-    #[structopt(parse(try_from_os_str = parse_dir))]
+    #[arg(value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), parse_dir))]
     pub right: std::path::PathBuf,
 }
 
-fn parse_dir(input: &std::ffi::OsStr) -> Result<std::path::PathBuf, std::ffi::OsString> {
+impl Args {
+    pub fn verbosity(&self) -> log::LevelFilter {
+        to_verbosity(self.verbosity)
+    }
+}
+
+fn parse_dir(input: std::ffi::OsString) -> Result<std::path::PathBuf, Error> {
     let path = std::path::PathBuf::from(input);
 
     if !path.exists() {
-        Err(std::ffi::OsString::from("Path does not exist"))
+        Err(Error::PathDoesNotExist)
     } else if !path.is_dir() {
-        Err(std::ffi::OsString::from("Path is not a directory"))
+        Err(Error::PathNotDir)
     } else {
         Ok(path)
     }
 }
 
-fn to_verbosity(value: u64) -> log::LevelFilter {
+fn to_verbosity(value: u8) -> log::LevelFilter {
     match value {
         0 => log::LevelFilter::Error,
         1 => log::LevelFilter::Warn,
