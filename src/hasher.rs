@@ -94,29 +94,28 @@ mod crawler {
                 })
             };
         }
+        macro_rules! unwrap {
+            ($match: expr) => {
+                match $match {
+                    Ok(ok) => ok,
+                    Err(e) => return send!(Err(e)),
+                }
+            };
+        }
 
-        let dir = match scan_dir(path) {
-            Ok(dir) => dir,
-            Err(e) => return send!(Err(e)),
-        };
-
-        for path in dir {
+        for path in unwrap!(scan_dir(path)) {
             if path.is_dir() {
                 let sender = sender.clone();
-                rayon::spawn(move || crawl_internal(&path, sender.clone()));
+                rayon::spawn(move || crawl_internal(&path, sender));
             } else {
                 use md5::Digest;
 
-                let mut file = match std::fs::OpenOptions::new()
+                let mut file = unwrap!(std::fs::OpenOptions::new()
                     .read(true)
                     .write(false)
                     .create(false)
                     .open(&path)
-                    .map_err(|e| Error::CannotRead(path.clone(), e))
-                {
-                    Ok(file) => file,
-                    Err(e) => return send!(Err(e)),
-                };
+                    .map_err(|e| Error::CannotRead(path.clone(), e)));
 
                 let mut hasher = md5::Md5::new();
                 let mut buffer = [0; 1024 * 4];
@@ -124,17 +123,14 @@ mod crawler {
                 loop {
                     use std::io::Read;
 
-                    let bytes = match file
+                    let bytes = unwrap!(file
                         .read(&mut buffer)
-                        .map_err(|e| Error::CannotRead(path.clone(), e))
-                    {
-                        Ok(bytes) => bytes,
-                        Err(e) => return send!(Err(e)),
-                    };
+                        .map_err(|e| Error::CannotRead(path.clone(), e)));
 
                     if bytes == 0 {
                         break;
                     }
+
                     hasher.update(&buffer[..bytes]);
                 }
 
