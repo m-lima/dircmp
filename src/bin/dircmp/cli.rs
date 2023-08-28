@@ -8,7 +8,7 @@ pub fn run(args: args::Args) -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
-    if let Err(e) = fallible_run(args.left, args.right) {
+    if let Err(e) = fallible_run(args.left, args.right, args.matched) {
         log::error!("{e}");
         return std::process::ExitCode::FAILURE;
     }
@@ -40,20 +40,29 @@ fn init_logger(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
     Ok(())
 }
 
-fn fallible_run(left: std::path::PathBuf, right: std::path::PathBuf) -> Result<(), dircmp::Error> {
+fn fallible_run(
+    left: std::path::PathBuf,
+    right: std::path::PathBuf,
+    show_matched: bool,
+) -> Result<(), dircmp::Error> {
+    log::debug!(
+        "left: {left}, right: {right}, show_matched: {show_matched}",
+        left = left.display(),
+        right = right.display(),
+    );
     let (left, right) = dircmp::compare(left, right)?;
 
-    print(&left, &right, false);
-    print(&right, &left, true);
+    print(&left, &right, show_matched, false);
+    print(&right, &left, show_matched, true);
     Ok(())
 }
 
-fn print(reference: &dircmp::Index, other: &dircmp::Index, skip: bool) {
+fn print(reference: &dircmp::Index, other: &dircmp::Index, show_matched: bool, skip: bool) {
     println!("[37mVisiting:[m {}", reference.path().display());
     for index in reference.children() {
         match index.status() {
             dircmp::Status::Same(_) => {
-                if !skip {
+                if show_matched && !skip {
                     println!("[32mMATCHES[m  {}", index.path().display());
                 }
             }
