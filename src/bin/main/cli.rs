@@ -8,7 +8,7 @@ pub fn run(args: args::Args) -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
-    if let Err(e) = dircmp::compare(args.left, args.right) {
+    if let Err(e) = fallible_run(args.left, args.right) {
         log::error!("{e}");
         return std::process::ExitCode::FAILURE;
     }
@@ -38,4 +38,21 @@ fn init_logger(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
     )?;
     log::info!("Log level set to {level}");
     Ok(())
+}
+
+fn fallible_run(left: std::path::PathBuf, right: std::path::PathBuf) -> Result<(), dircmp::Error> {
+    let (left, right) = dircmp::compare(left, right)?;
+
+    print(left);
+    print(right);
+    Ok(())
+}
+
+fn print(index: dircmp::Index) {
+    let (path, indices) = index.decompose();
+
+    println!("{}", path.display());
+    for index in indices {
+        println!("{} :: {:?}", index.path.display(), index.status);
+    }
 }

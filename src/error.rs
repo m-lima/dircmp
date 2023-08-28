@@ -4,6 +4,4 @@ pub enum Error {
     Thread(#[from] crate::thread::Error),
     #[error(transparent)]
     Index(#[from] crate::index::Error),
-    #[error(transparent)]
-    Matches(#[from] crate::matches::Error),
 }

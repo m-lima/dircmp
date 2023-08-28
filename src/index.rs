@@ -1,4 +1,4 @@
-type Entry = ([u8; 16], std::path::PathBuf);
+use super::entry;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -12,11 +12,28 @@ pub enum Error {
 
 pub struct Index {
     path: std::path::PathBuf,
-    children: Vec<Entry>,
+    children: Vec<entry::Entry>,
 }
 
 impl Index {
-    pub fn new(path: std::path::PathBuf, pool: &rayon::ThreadPool) -> Result<Self, Error> {
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    #[must_use]
+    pub fn children(&self) -> &[entry::Entry] {
+        &self.children
+    }
+
+    #[must_use]
+    pub fn decompose(self) -> (std::path::PathBuf, Vec<entry::Entry>) {
+        (self.path, self.children)
+    }
+}
+
+impl Index {
+    pub(crate) fn new(path: std::path::PathBuf, pool: &rayon::ThreadPool) -> Result<Self, Error> {
         log::info!("Indexing {}", path.display());
         let children = pool.install(|| init(&path))?;
         log::info!(
@@ -28,36 +45,61 @@ impl Index {
         Ok(Self { path, children })
     }
 
-    pub fn decompose(self) -> (std::path::PathBuf, Vec<Entry>) {
-        (self.path, self.children)
+    pub(crate) fn compare(&mut self, other: &Self, pool: &rayon::ThreadPool) {
+        use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+
+        pool.install(|| {
+            self.children.par_iter_mut().for_each(|entry| {
+                match other.children.binary_search(entry) {
+                    Ok(i) => entry.status = entry::Status::Same(i),
+                    Err(i) => {
+                        let mut hash = entry.hash;
+                        for byte in hash.iter_mut().rev().skip_while(|b| **b == 0).take(1) {
+                            *byte -= 1;
+                        }
+                        let i = match other.children[..i].binary_search_by(|e| e.hash.cmp(&hash)) {
+                            Ok(i) | Err(i) => i,
+                        };
+                        let indices = other.children[i..]
+                            .iter()
+                            .take_while(|e| e.hash == entry.hash)
+                            .enumerate()
+                            .map(|(idx, _)| idx + i)
+                            .collect::<Vec<_>>();
+                        match indices.len() {
+                            0 => entry.status = entry::Status::Unique,
+                            1 => {
+                                entry.status =
+                                    entry::Status::Moved(unsafe { *indices.get_unchecked(0) });
+                            }
+                            _ => entry.status = entry::Status::Hash(indices),
+                        }
+                    }
+                }
+            });
+        });
     }
 }
 
-fn init(path: &std::path::Path) -> Result<Vec<Entry>, Error> {
+fn init(path: &std::path::Path) -> Result<Vec<entry::Entry>, Error> {
     let (sender, receiver) = std::sync::mpsc::channel();
     crawler::crawl(path, sender)?;
     accumulate(&receiver, path)
 }
 
 fn accumulate(
-    receiver: &std::sync::mpsc::Receiver<Result<Entry, crawler::Error>>,
+    receiver: &std::sync::mpsc::Receiver<Result<crawler::Entry, crawler::Error>>,
     base: &std::path::Path,
-) -> Result<Vec<Entry>, Error> {
+) -> Result<Vec<entry::Entry>, Error> {
     let mut paths = Vec::new();
     while let Ok(result) = receiver.recv() {
-        let entry = match result {
-            Ok((hash, path)) => (
-                hash,
-                match path.strip_prefix(base) {
-                    Ok(path) => path.to_path_buf(),
-                    Err(_) => return Err(Error::StripPrefix(base.to_path_buf(), path)),
-                },
-            ),
-            Err(e) => return Err(Error::Crawler(e)),
-        };
+        let (hash, path) = result?;
+
+        let entry = entry::Entry::new(&path, base, hash)
+            .map_err(|_| Error::StripPrefix(base.to_path_buf(), path))?;
 
         let Err(index) = paths.binary_search(&entry) else {
-            return Err(Error::FullCollision(entry.1));
+            return Err(Error::FullCollision(entry.path));
         };
 
         paths.insert(index, entry);
@@ -70,7 +112,7 @@ fn accumulate(
 }
 
 mod crawler {
-    use super::Entry;
+    pub type Entry = (super::entry::Hash, std::path::PathBuf);
 
     #[derive(Debug, thiserror::Error)]
     pub enum Error {
