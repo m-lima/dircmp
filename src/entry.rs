@@ -91,6 +91,18 @@ impl Status {
     }
 }
 
+impl std::fmt::Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::Same(_) => f.write_str("SAME"),
+            Status::Moved(_) => f.write_str("MOVED"),
+            Status::Modified(_) => f.write_str("MODIFIED"),
+            Status::Maybe(_) => f.write_str("MAYBE"),
+            Status::Unique => f.write_str("UNIQUE"),
+        }
+    }
+}
+
 impl std::cmp::Ord for Status {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.as_index().cmp(&other.as_index())

@@ -25,18 +25,6 @@ pub fn compare(
 
     first_pass(&mut left, &mut right, &pool);
     second_pass(&mut left, &mut right, &pool);
-    // clean_pair(&left, &mut right, &pool);
-    // for (left_idx, e) in left.children.iter().enumerate() {
-    //     match e.status {
-    //         entry::Status::Same(right_idx) => unsafe {
-    //             right.children.get_unchecked_mut(right_idx).status = entry::Status::Same(left_idx);
-    //         },
-    //         entry::Status::Modified(right_idx) => unsafe {
-    //             right.children.get_unchecked_mut(right_idx).status = entry::Status::Modified(left_idx);
-    //         },
-    //         _ => {}
-    //     }
-    // }
 
     Ok((left, right))
 }
@@ -57,18 +45,6 @@ fn first_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::T
                         unsafe { (*ptr.add(i)).status = entry::Status::Same(left_idx) };
                     }
                     Err(i) => {
-                        // let i = match right.children[..i]
-                        //     .binary_search_by(|e| e.hash.cmp(&entry.hash.decrement()))
-                        // {
-                        //     Ok(i) | Err(i) => i,
-                        // };
-                        //
-                        // let indices = right.children[i..]
-                        //     .iter()
-                        //     .take_while(|e| e.hash == entry.hash)
-                        //     .enumerate()
-                        //     .map(|(idx, _)| idx + i)
-                        //     .collect::<Vec<_>>();
                         let indices = matching_hashes(&entry.hash, i, right.children());
                         match indices.len() {
                             0 => {
@@ -83,10 +59,6 @@ fn first_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::T
                                     entry.status = entry::Status::Unique;
                                 }
                             }
-                            // 1 => {
-                            //     entry.status =
-                            //         entry::Status::Moved(unsafe { *indices.get_unchecked(0) });
-                            // }
                             _ => entry.status = entry::Status::Maybe(indices),
                         }
                     }
@@ -109,7 +81,10 @@ fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::
                 match left.children.binary_search(entry) {
                     Ok(i) => {
                         entry.status = entry::Status::Same(i);
-                        log::warn!("Found `SAME` on second pass for {}", entry.path.display());
+                        log::warn!(
+                            "Marking unexpected `SAME` on second pass for {}",
+                            entry.path.display()
+                        );
                     }
                     Err(i) => {
                         let indices = matching_hashes(&entry.hash, i, left.children());
@@ -117,14 +92,23 @@ fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::
                             0 => entry.status = entry::Status::Unique,
                             1 => unsafe {
                                 let left_idx = *indices.get_unchecked(0);
-                                entry.status = entry::Status::Moved(left_idx);
                                 let correspondent = &mut *ptr.add(left_idx);
-                                if let entry::Status::Maybe(maybes) = &correspondent.status {
-                                    if maybes.len() == 1 {
-                                        let right_idx = *maybes.get_unchecked(0);
-                                        correspondent.status = entry::Status::Moved(right_idx);
+                                match &correspondent.status {
+                                    Status::Maybe(maybes) => {
+                                        if maybes.len() == 1 {
+                                            let right_idx = *maybes.get_unchecked(0);
+                                            correspondent.status = entry::Status::Moved(right_idx);
+                                        }
+                                    }
+                                    status => {
+                                        log::warn!(
+                                            "Expected `MAYBE` on left side during second pass for {}, but got{}",
+                                            entry.path.display(),
+                                            status,
+                                        );
                                     }
                                 }
+                                entry.status = entry::Status::Moved(left_idx);
                             },
                             _ => entry.status = entry::Status::Maybe(indices),
                         }
@@ -135,7 +119,7 @@ fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::
 }
 
 fn matching_hashes(hash: &entry::Hash, pivot: usize, children: &[entry::Entry]) -> Vec<usize> {
-    let i = match children[..pivot].binary_search_by(|e| e.hash.cmp(hash)) {
+    let i = match children[..pivot].binary_search_by(|e| e.hash.cmp(&hash.decrement())) {
         Ok(i) | Err(i) => i,
     };
 
@@ -146,29 +130,3 @@ fn matching_hashes(hash: &entry::Hash, pivot: usize, children: &[entry::Entry]) 
         .map(|(idx, _)| idx + i)
         .collect()
 }
-
-// fn clean_pair(left: &index::Index, right: &mut index::Index, pool: &rayon::ThreadPool) {
-//     use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-//
-//     let ptr = right.children.as_mut_ptr() as usize;
-//     pool.install(|| {
-//         // for (left_idx, e) in
-//         left.children
-//             .par_iter()
-//             .enumerate()
-//             .for_each(|(left_idx, e)| {
-//                 let ptr = ptr as *mut entry::Entry;
-//                 match e.status {
-//                     entry::Status::Same(right_idx) => unsafe {
-//                         (*ptr.add(right_idx)).status = entry::Status::Same(left_idx);
-//                         // right.children.get_unchecked_mut(right_idx).status = entry::Status::Same(left_idx);
-//                     },
-//                     entry::Status::Modified(right_idx) => unsafe {
-//                         (*ptr.add(right_idx)).status = entry::Status::Modified(left_idx);
-//                         // right.children.get_unchecked_mut(right_idx).status = entry::Status::Modified(left_idx);
-//                     },
-//                     _ => {}
-//                 }
-//             });
-//     });
-// }
