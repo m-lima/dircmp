@@ -24,15 +24,12 @@ impl Index {
             children.len(),
             path.display()
         );
+
         Ok(Self { path, children })
     }
 
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
-    }
-
-    pub fn len(&self) -> usize {
-        self.children.len()
+    pub fn decompose(self) -> (std::path::PathBuf, Vec<Entry>) {
+        (self.path, self.children)
     }
 }
 

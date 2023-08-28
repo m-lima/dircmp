@@ -6,23 +6,23 @@ enum Error {
     PathNotDir,
 }
 
-pub fn parse() -> Args {
-    <Args as clap::Parser>::parse()
+pub fn parse() -> App {
+    <App as clap::Parser>::parse()
 }
 
 #[derive(Debug, clap::Parser)]
-pub struct Args {
+pub struct App {
     #[command(subcommand)]
-    pub cli: Option<Cli>,
+    pub cli: Option<Command>,
 }
 
 #[derive(Debug, clap::Subcommand)]
-pub enum Cli {
-    Cli(CliArgs),
+pub enum Command {
+    Cli(Args),
 }
 
 #[derive(Debug, clap::Args)]
-pub struct CliArgs {
+pub struct Args {
     /// Verbosity level
     #[arg(short, action = clap::ArgAction::Count)]
     pub verbosity: u8,
@@ -34,7 +34,7 @@ pub struct CliArgs {
     pub right: std::path::PathBuf,
 }
 
-impl CliArgs {
+impl Args {
     pub fn verbosity(&self) -> log::LevelFilter {
         to_verbosity(self.verbosity)
     }

@@ -1,6 +1,6 @@
-use super::{args, error, hasher, thread};
+use super::args;
 
-pub fn run(args: args::CliArgs) -> std::process::ExitCode {
+pub fn run(args: args::Args) -> std::process::ExitCode {
     let start = std::time::Instant::now();
 
     if let Err(e) = init_logger(args.verbosity()) {
@@ -8,7 +8,7 @@ pub fn run(args: args::CliArgs) -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
-    if let Err(e) = fallible_run(args) {
+    if let Err(e) = dircmp::compare(args.left, args.right) {
         log::error!("{e}");
         return std::process::ExitCode::FAILURE;
     }
@@ -37,12 +37,5 @@ fn init_logger(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
         simplelog::ColorChoice::Auto,
     )?;
     log::info!("Log level set to {level}");
-    Ok(())
-}
-
-fn fallible_run(args: args::CliArgs) -> error::Result {
-    let pool = thread::pool()?;
-    let left = hasher::Index::new(args.left, &pool)?;
-    let right = hasher::Index::new(args.right, &pool)?;
     Ok(())
 }
