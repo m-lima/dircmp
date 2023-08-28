@@ -50,7 +50,8 @@ impl Index {
 
 fn init(path: &std::path::Path) -> Result<Vec<entry::Entry>, Error> {
     let (sender, receiver) = std::sync::mpsc::channel();
-    crawler::crawl(path, sender)?;
+    let crawl_path = path.to_path_buf();
+    rayon::spawn(|| crawler::crawl(crawl_path, sender));
     accumulate(&receiver, path)
 }
 
@@ -59,7 +60,8 @@ fn accumulate(
     base: &std::path::Path,
 ) -> Result<Vec<entry::Entry>, Error> {
     let mut paths = Vec::new();
-    let mut start = std::time::Instant::now();
+    let start = std::time::Instant::now();
+
     while let Ok(result) = receiver.recv() {
         let (hash, path) = result?;
 
@@ -71,13 +73,13 @@ fn accumulate(
         };
 
         paths.insert(index, entry);
-        if paths.len() & (2048 - 1) == 0 {
-            log::debug!(
-                "Indexed {} items as {:.02} item/s",
-                paths.len(),
-                2048.0 / start.elapsed().as_secs_f64()
-            );
-            start = std::time::Instant::now();
+
+        let len = paths.len();
+        if len & (2048 - 1) == 0 {
+            let elapsed = start.elapsed().as_secs();
+            if elapsed > 0 {
+                log::debug!("Indexed {len} items at {} items/s", len as u64 / elapsed);
+            }
         }
     }
 
@@ -85,92 +87,131 @@ fn accumulate(
 }
 
 mod crawler {
+    macro_rules! send {
+        ($sender: ident, $value: expr) => {
+            $sender.send($value).map_err(|e| match e.0 {
+                Ok((_, path)) => Error::Send(path),
+                Err(e) => e,
+            })
+        };
+    }
+
+    macro_rules! unwrap {
+        ($sender: ident, $match: expr) => {
+            match $match {
+                Ok(ok) => ok,
+                Err(e) => return send!($sender, Err(e)),
+            }
+        };
+    }
+
     pub type Entry = (super::entry::Hash, std::path::PathBuf);
 
     #[derive(Debug, thiserror::Error)]
     pub enum Error {
-        #[error("Could not read file {0}: {1}")]
+        #[error("Hasher could not open file {0}: {1}")]
+        CannotOpen(std::path::PathBuf, std::io::Error),
+        #[error("Hasher could not read file {0}: {1}")]
         CannotRead(std::path::PathBuf, std::io::Error),
-        #[error("Could not read directory `{0}`: {1}")]
+        #[error("Crawler could not read directory `{0}`: {1}")]
         DirUnreadable(std::path::PathBuf, std::io::Error),
-        #[error("Could not read directory entry for `{0}`: {1}")]
+        #[error("Crawler could not read directory entry for `{0}`: {1}")]
         EntryUnreadable(std::path::PathBuf, std::io::Error),
         #[error("Entry: {0}")]
         Send(std::path::PathBuf),
     }
 
-    pub fn crawl(
-        path: &std::path::Path,
+    pub fn crawl(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Result<Entry, Error>>) {
+        if let Err(e) = crawl_internal(path, sender) {
+            log::error!("Failed to send error from crawler: {e}");
+        }
+    }
+
+    fn crawl_internal(
+        path: std::path::PathBuf,
         sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
     ) -> Result<(), Error> {
-        macro_rules! send {
-            ($value: expr) => {
-                sender.send($value).map_err(|e| match e.0 {
-                    Ok((_, path)) => Error::Send(path),
-                    Err(e) => e,
-                })
-            };
-        }
-        macro_rules! unwrap {
-            ($match: expr) => {
-                match $match {
-                    Ok(ok) => ok,
-                    Err(e) => return send!(Err(e)),
-                }
-            };
-        }
+        for path in unwrap!(sender, scan_dir(&path)) {
+            if path.is_symlink() {
+                let Ok(metadata) = path.metadata() else {
+                        log::warn!("Found broken symlink at {}", path.display());
+                        continue;
+                };
 
-        for path in unwrap!(scan_dir(path)) {
-            if path.is_dir() {
                 let sender = sender.clone();
-                rayon::spawn(move || crawl_internal(&path, sender));
-            } else {
-                use md5::Digest;
-
-                let mut file = unwrap!(std::fs::OpenOptions::new()
-                    .read(true)
-                    .write(false)
-                    .create(false)
-                    .open(&path)
-                    .map_err(|e| Error::CannotRead(path.clone(), e)));
-
-                let mut hasher = md5::Md5::new();
-                let mut buffer = [0; 1024 * 4];
-
-                loop {
-                    use std::io::Read;
-
-                    let bytes = unwrap!(file
-                        .read(&mut buffer)
-                        .map_err(|e| Error::CannotRead(path.clone(), e)));
-
-                    if bytes == 0 {
-                        break;
-                    }
-
-                    hasher.update(&buffer[..bytes]);
+                if metadata.is_dir() {
+                    crawl_internal(path, sender)?;
+                } else {
+                    rayon::spawn(move || hash(path, sender));
                 }
-
-                send!(Ok((super::entry::Hash::new(hasher.finalize()), path)))?;
+            } else {
+                let sender = sender.clone();
+                if path.is_dir() {
+                    crawl_internal(path, sender)?;
+                } else {
+                    rayon::spawn(move || hash(path, sender));
+                }
             }
         }
 
+        drop(path);
         drop(sender);
         Ok(())
     }
 
-    pub fn crawl_internal(
-        path: &std::path::Path,
-        sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
-    ) {
-        if let Err(e) = crawl(path, sender) {
+    fn hash(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Result<Entry, Error>>) {
+        if let Err(e) = hash_internal(path, sender) {
             match e {
                 Error::Send(path) => {
-                    log::error!("Failed to send entry from crawler: {}", path.display());
+                    log::error!("Failed to send entry from hasher: {}", path.display());
                 }
-                e => log::error!("Failed to send error from crawler: {e}"),
+                e => log::error!("Failed to send error from hasher: {e}"),
             }
         }
+    }
+
+    fn hash_internal(
+        path: std::path::PathBuf,
+        sender: std::sync::mpsc::Sender<Result<Entry, Error>>,
+    ) -> Result<(), Error> {
+        use md5::Digest;
+
+        let mut file = unwrap!(
+            sender,
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(false)
+                .create(false)
+                .open(&path)
+                .map_err(|e| Error::CannotOpen(path.clone(), e))
+        );
+
+        let mut hasher = md5::Md5::new();
+        let mut buffer = [0; 1024 * 4];
+
+        loop {
+            use std::io::Read;
+
+            let bytes = unwrap!(
+                sender,
+                file.read(&mut buffer)
+                    .map_err(|e| Error::CannotRead(path.clone(), e))
+            );
+
+            if bytes == 0 {
+                break;
+            }
+
+            hasher.update(&buffer[..bytes]);
+        }
+
+        send!(
+            sender,
+            Ok((super::entry::Hash::new(hasher.finalize()), path))
+        )?;
+
+        drop(sender);
+        Ok(())
     }
 
     fn scan_dir(path: &std::path::Path) -> Result<Vec<std::path::PathBuf>, Error> {
