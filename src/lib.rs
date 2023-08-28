@@ -32,6 +32,9 @@ pub fn compare(
 fn first_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::ThreadPool) {
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
+    log::info!("Starting first pass");
+    let start = std::time::Instant::now();
+
     let ptr = right.children.as_mut_ptr() as usize;
     pool.install(|| {
         left.children
@@ -65,10 +68,15 @@ fn first_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::T
                 }
             });
     });
+
+    log::info!("Finished first pass in {:?}", start.elapsed());
 }
 
 fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::ThreadPool) {
     use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+
+    log::info!("Starting second pass");
+    let start = std::time::Instant::now();
 
     let ptr = left.children.as_mut_ptr() as usize;
     pool.install(|| {
@@ -116,6 +124,8 @@ fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::
                 }
             });
     });
+
+    log::info!("Finished second pass in {:?}", start.elapsed());
 }
 
 fn matching_hashes(hash: &entry::Hash, pivot: usize, children: &[entry::Entry]) -> Vec<usize> {

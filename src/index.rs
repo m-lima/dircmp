@@ -35,11 +35,13 @@ impl Index {
 impl Index {
     pub(crate) fn new(path: std::path::PathBuf, pool: &rayon::ThreadPool) -> Result<Self, Error> {
         log::info!("Indexing {}", path.display());
+        let start = std::time::Instant::now();
         let children = pool.install(|| init(&path))?;
         log::info!(
-            "Finished indexing {} items for {}",
+            "Finished indexing {} items for {} in {:?}",
             children.len(),
-            path.display()
+            path.display(),
+            start.elapsed(),
         );
 
         Ok(Self { path, children })
@@ -57,6 +59,7 @@ fn accumulate(
     base: &std::path::Path,
 ) -> Result<Vec<entry::Entry>, Error> {
     let mut paths = Vec::new();
+    let mut start = std::time::Instant::now();
     while let Ok(result) = receiver.recv() {
         let (hash, path) = result?;
 
@@ -68,8 +71,13 @@ fn accumulate(
         };
 
         paths.insert(index, entry);
-        if paths.len() & (1024 - 1) == 0 {
-            log::debug!("Indexed {} items", paths.len());
+        if paths.len() & (2048 - 1) == 0 {
+            log::debug!(
+                "Indexed {} items as {:.02} item/s",
+                paths.len(),
+                2048.0 / start.elapsed().as_secs_f64()
+            );
+            start = std::time::Instant::now();
         }
     }
 
