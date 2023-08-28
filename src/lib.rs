@@ -3,6 +3,7 @@ mod error;
 mod index;
 mod thread;
 
+pub use entry::{Entry, Status};
 pub use error::Error;
 pub use index::Index;
 

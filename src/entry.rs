@@ -2,13 +2,30 @@ pub type Hash = [u8; 16];
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Entry {
-    pub hash: Hash,
-    pub path: std::path::PathBuf,
-    pub status: Status,
+    pub(crate) hash: Hash,
+    pub(crate) path: std::path::PathBuf,
+    pub(crate) status: Status,
 }
 
 impl Entry {
-    pub fn new(
+    #[must_use]
+    pub fn hash(&self) -> &Hash {
+        &self.hash
+    }
+
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    #[must_use]
+    pub fn status(&self) -> &Status {
+        &self.status
+    }
+}
+
+impl Entry {
+    pub(crate) fn new(
         path: &std::path::Path,
         base: &std::path::Path,
         hash: Hash,

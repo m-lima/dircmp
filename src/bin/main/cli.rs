@@ -43,16 +43,49 @@ fn init_logger(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
 fn fallible_run(left: std::path::PathBuf, right: std::path::PathBuf) -> Result<(), dircmp::Error> {
     let (left, right) = dircmp::compare(left, right)?;
 
-    print(left);
-    print(right);
+    print(&left, &right, false);
+    print(&right, &left, true);
     Ok(())
 }
 
-fn print(index: dircmp::Index) {
-    let (path, indices) = index.decompose();
-
-    println!("{}", path.display());
-    for index in indices {
-        println!("{} :: {:?}", index.path.display(), index.status);
+fn print(reference: &dircmp::Index, other: &dircmp::Index, skip: bool) {
+    println!("{}", reference.path().display());
+    for index in reference.children() {
+        match index.status() {
+            dircmp::Status::Same(_) => {
+                if !skip {
+                    println!("[32mMATCHES[m");
+                    println!("[32m└[m {}", index.path().display());
+                }
+            }
+            dircmp::Status::Moved(i) => {
+                if !skip {
+                    println!("[33mMOVED");
+                    println!("[33m┌[m {}", index.path().display());
+                    println!("[33m└[m {}", unsafe {
+                        other.children().get_unchecked(*i).path().display()
+                    });
+                }
+            }
+            dircmp::Status::Hash(indices) => {
+                let Some((tail, head)) = indices.split_last() else {
+                    continue;
+                };
+                println!("[34mMAYBE");
+                println!("[34m╱[m {}", index.path().display());
+                for i in head {
+                    println!("[34m├[m {}", unsafe {
+                        other.children().get_unchecked(*i).path().display()
+                    });
+                }
+                println!("[34m└[m {}", unsafe {
+                    other.children().get_unchecked(*tail).path().display()
+                });
+            }
+            dircmp::Status::Unique => {
+                println!("[31mUNIQUE[m");
+                println!("[31m└[m {}", index.path().display());
+            }
+        }
     }
 }
