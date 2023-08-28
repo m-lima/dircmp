@@ -12,6 +12,17 @@ pub fn parse() -> Args {
 
 #[derive(Debug, clap::Parser)]
 pub struct Args {
+    #[command(subcommand)]
+    pub cli: Option<Cli>,
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum Cli {
+    Cli(CliArgs),
+}
+
+#[derive(Debug, clap::Args)]
+pub struct CliArgs {
     /// Verbosity level
     #[arg(short, action = clap::ArgAction::Count)]
     pub verbosity: u8,
@@ -23,7 +34,7 @@ pub struct Args {
     pub right: std::path::PathBuf,
 }
 
-impl Args {
+impl CliArgs {
     pub fn verbosity(&self) -> log::LevelFilter {
         to_verbosity(self.verbosity)
     }

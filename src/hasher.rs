@@ -17,7 +17,13 @@ pub struct Index {
 
 impl Index {
     pub fn new(path: std::path::PathBuf, pool: &rayon::ThreadPool) -> Result<Self, Error> {
+        log::info!("Indexing {}", path.display());
         let children = pool.install(|| init(&path))?;
+        log::info!(
+            "Finished indexing {} items for {}",
+            children.len(),
+            path.display()
+        );
         Ok(Self { path, children })
     }
 
@@ -33,13 +39,12 @@ impl Index {
 fn init(path: &std::path::Path) -> Result<Vec<Entry>, Error> {
     let (sender, receiver) = std::sync::mpsc::channel();
     crawler::crawl(path, sender)?;
-    accumulate(&receiver, path, true)
+    accumulate(&receiver, path)
 }
 
 fn accumulate(
     receiver: &std::sync::mpsc::Receiver<Result<Entry, crawler::Error>>,
     base: &std::path::Path,
-    verbose: bool,
 ) -> Result<Vec<Entry>, Error> {
     let mut paths = Vec::new();
     while let Ok(result) = receiver.recv() {
@@ -59,8 +64,8 @@ fn accumulate(
         };
 
         paths.insert(index, entry);
-        if verbose && paths.len() & (1024 - 1) == 0 {
-            log::info!("Indexed {} items", paths.len());
+        if paths.len() & (1024 - 1) == 0 {
+            log::debug!("Indexed {} items", paths.len());
         }
     }
 
