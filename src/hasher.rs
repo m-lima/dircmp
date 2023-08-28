@@ -60,7 +60,7 @@ fn accumulate(
 
         paths.insert(index, entry);
         if verbose && paths.len() & (1024 - 1) == 0 {
-            eprintln!("Indexed {} items", paths.len());
+            log::info!("Indexed {} items", paths.len());
         }
     }
 
@@ -149,9 +149,9 @@ mod crawler {
         if let Err(e) = crawl(path, sender) {
             match e {
                 Error::Send(path) => {
-                    eprintln!("Failed to send entry from crawler: {}", path.display());
+                    log::error!("Failed to send entry from crawler: {}", path.display());
                 }
-                e => eprintln!("Failed to send error from crawler: {e}"),
+                e => log::error!("Failed to send error from crawler: {e}"),
             }
         }
     }

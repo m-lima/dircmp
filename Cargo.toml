@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# clap = { version = "4.4.0", features = ["derive"] }
+log = "0.4.20"
 md-5 = "0.10.5"
 rayon = "1.7.0"
+simplelog = "0.12.1"
+structopt = "0.3.26"
 thiserror = "1.0.47"
-
-# TODO: Dependencies
-# clap = { version = "4.4.0", features = ["derive"] }
-# log = "0.4.20"
-# simplelog = "0.12.1"
+time = "0.3.28"
