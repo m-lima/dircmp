@@ -70,6 +70,20 @@ impl Hash {
     }
 }
 
+impl std::fmt::LowerHex for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let num = u128::from_be_bytes(self.0);
+        std::fmt::LowerHex::fmt(&num, f)
+    }
+}
+
+impl std::fmt::UpperHex for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let num = u128::from_be_bytes(self.0);
+        std::fmt::UpperHex::fmt(&num, f)
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Status {
     Same(usize),
@@ -112,5 +126,27 @@ impl std::cmp::Ord for Status {
 impl std::cmp::PartialOrd for Status {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn hex_print() {
+        let bytes = [0x45, 0xaa, 0x00, 0xa, 0xa0, 0xff, 0x80, 0x33];
+        let le = u64::from_le_bytes(bytes);
+        let be = u64::from_be_bytes(bytes);
+        let ne = u64::from_ne_bytes(bytes);
+
+        let expected = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+
+        println!("Expected: {expected}");
+        println!("Little:   {le:08x}");
+        println!("Big:      {be:08x}");
+        println!("Native:   {ne:08x}");
+
+        assert_eq!(format!("{le:08x}"), expected);
+        assert_eq!(format!("{be:08x}"), expected);
+        assert_eq!(format!("{ne:08x}"), expected);
     }
 }
