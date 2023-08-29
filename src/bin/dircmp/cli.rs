@@ -59,7 +59,7 @@ fn fallible_run(
 
 fn print(reference: &dircmp::Index, other: &dircmp::Index, show_matched: bool, skip: bool) {
     println!("[37mVisiting:[m {}", reference.path().display());
-    for index in reference.children() {
+    for index in reference.entries() {
         match index.status() {
             dircmp::Status::Same(_) => {
                 if show_matched && !skip {
@@ -70,7 +70,7 @@ fn print(reference: &dircmp::Index, other: &dircmp::Index, show_matched: bool, s
                 if !skip {
                     println!("[33mMOVED[m    {}", index.path().display());
                     println!("[33m└[m {}", unsafe {
-                        other.children().get_unchecked(*i).path().display()
+                        other.entries().get_unchecked(*i).path().display()
                     });
                 }
             }
@@ -78,7 +78,7 @@ fn print(reference: &dircmp::Index, other: &dircmp::Index, show_matched: bool, s
                 if !skip {
                     println!("[35mMODIFIED[m {}", index.path().display());
                     println!("[35m└[m {}", unsafe {
-                        other.children().get_unchecked(*i).path().display()
+                        other.entries().get_unchecked(*i).path().display()
                     });
                 }
             }
@@ -89,11 +89,11 @@ fn print(reference: &dircmp::Index, other: &dircmp::Index, show_matched: bool, s
                 println!("[34mMAYBE[m    {}", index.path().display());
                 for i in head {
                     println!("[34m├[m {}", unsafe {
-                        other.children().get_unchecked(*i).path().display()
+                        other.entries().get_unchecked(*i).path().display()
                     });
                 }
                 println!("[34m└[m {}", unsafe {
-                    other.children().get_unchecked(*tail).path().display()
+                    other.entries().get_unchecked(*tail).path().display()
                 });
             }
             dircmp::Status::Unique => {

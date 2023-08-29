@@ -1,3 +1,32 @@
+#[derive(Debug)]
+pub struct Index {
+    path: std::path::PathBuf,
+    entries: Vec<Entry>,
+}
+
+impl Index {
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    #[must_use]
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
+    #[must_use]
+    pub fn decompose(self) -> (std::path::PathBuf, Vec<Entry>) {
+        (self.path, self.entries)
+    }
+}
+
+impl Index {
+    pub(crate) fn new(path: std::path::PathBuf, entries: Vec<Entry>) -> Self {
+        Self { path, entries }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Entry {
     pub(crate) hash: Hash,

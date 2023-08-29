@@ -1,20 +1,22 @@
+// TODO: rename
 mod entry;
+// TODO: rename
 mod index;
 mod thread;
 
-pub use entry::{Entry, Status};
-pub use index::Index;
+pub use entry::{Entry, Index, Status};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
     Thread(#[from] crate::thread::Error),
+    // TODO: rename
     #[error(transparent)]
     Index(#[from] crate::index::Error),
 }
 
 /// Compares two directories [`left`](std::path::PathBuf) and [`right`](std::path::PathBuf)
-/// returning the [`Index`](index::Index)
+/// returning the [`Index`](Index)
 ///
 /// # Errors
 ///
@@ -24,42 +26,46 @@ pub enum Error {
 pub fn compare(
     left: std::path::PathBuf,
     right: std::path::PathBuf,
-) -> Result<(index::Index, index::Index), Error> {
+) -> Result<(entry::Index, entry::Index), Error> {
     let pool = thread::pool()?;
-    let mut left = index::Index::new(left, &pool)?;
-    let mut right = index::Index::new(right, &pool)?;
+    let mut left_entries = index::crawl(&left, &pool)?;
+    let mut right_entries = index::crawl(&right, &pool)?;
 
-    first_pass(&mut left, &mut right, &pool);
-    second_pass(&mut left, &mut right, &pool);
+    first_pass(&mut left_entries, &mut right_entries, &pool);
+    second_pass(&mut left_entries, &mut right_entries, &pool);
+
+    let left = entry::Index::new(left, left_entries);
+    let right = entry::Index::new(right, right_entries);
 
     Ok((left, right))
 }
 
-fn first_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::ThreadPool) {
+fn first_pass(
+    left: &mut Vec<entry::Entry>,
+    right: &mut Vec<entry::Entry>,
+    pool: &rayon::ThreadPool,
+) {
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
     log::info!("Starting first pass");
     let start = std::time::Instant::now();
 
-    let ptr = right.children.as_mut_ptr() as usize;
+    let ptr = right.as_mut_ptr() as usize;
     pool.install(|| {
-        left.children
-            .par_iter_mut()
+        left.par_iter_mut()
             .enumerate()
             .for_each(|(left_idx, entry)| {
                 let ptr = ptr as *mut entry::Entry;
-                match right.children.binary_search(entry) {
+                match right.binary_search(entry) {
                     Ok(i) => {
                         entry.status = entry::Status::Same(i);
                         unsafe { (*ptr.add(i)).status = entry::Status::Same(left_idx) };
                     }
                     Err(i) => {
-                        let indices = matching_hashes(&entry.hash, i, right.children());
+                        let indices = matching_hashes(&entry.hash, i, right);
                         match indices.len() {
                             0 => {
-                                if let Some(i) =
-                                    right.children().iter().position(|e| e.path == entry.path)
-                                {
+                                if let Some(i) = right.iter().position(|e| e.path == entry.path) {
                                     entry.status = entry::Status::Modified(i);
                                     unsafe {
                                         (*ptr.add(i)).status = entry::Status::Modified(left_idx);
@@ -78,21 +84,24 @@ fn first_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::T
     log::info!("Finished first pass in {:?}", start.elapsed());
 }
 
-fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::ThreadPool) {
+fn second_pass(
+    left: &mut Vec<entry::Entry>,
+    right: &mut Vec<entry::Entry>,
+    pool: &rayon::ThreadPool,
+) {
     use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
     log::info!("Starting second pass");
     let start = std::time::Instant::now();
 
-    let ptr = left.children.as_mut_ptr() as usize;
+    let ptr = left.as_mut_ptr() as usize;
     pool.install(|| {
         right
-            .children
             .par_iter_mut()
             .filter(|e| matches!(e.status, entry::Status::Unique))
             .for_each(|entry| {
                 let ptr = ptr as *mut entry::Entry;
-                match left.children.binary_search(entry) {
+                match left.binary_search(entry) {
                     Ok(i) => {
                         entry.status = entry::Status::Same(i);
                         log::warn!(
@@ -101,7 +110,7 @@ fn second_pass(left: &mut index::Index, right: &mut index::Index, pool: &rayon::
                         );
                     }
                     Err(i) => {
-                        let indices = matching_hashes(&entry.hash, i, left.children());
+                        let indices = matching_hashes(&entry.hash, i, left);
                         match indices.len() {
                             0 => entry.status = entry::Status::Unique,
                             1 => unsafe {
