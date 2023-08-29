@@ -1,7 +1,6 @@
+mod crawler;
 // TODO: rename
 mod entry;
-// TODO: rename
-mod index;
 mod thread;
 
 pub use entry::{Entry, Index, Status};
@@ -9,10 +8,9 @@ pub use entry::{Entry, Index, Status};
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Thread(#[from] crate::thread::Error),
-    // TODO: rename
+    Thread(#[from] thread::Error),
     #[error(transparent)]
-    Index(#[from] crate::index::Error),
+    Crawler(#[from] crawler::Error),
 }
 
 /// Compares two directories [`left`](std::path::PathBuf) and [`right`](std::path::PathBuf)
@@ -28,8 +26,8 @@ pub fn compare(
     right: std::path::PathBuf,
 ) -> Result<(entry::Index, entry::Index), Error> {
     let pool = thread::pool()?;
-    let mut left_entries = index::crawl(&left, &pool)?;
-    let mut right_entries = index::crawl(&right, &pool)?;
+    let mut left_entries = crawler::crawl(&left, &pool)?;
+    let mut right_entries = crawler::crawl(&right, &pool)?;
 
     first_pass(&mut left_entries, &mut right_entries, &pool);
     second_pass(&mut left_entries, &mut right_entries, &pool);

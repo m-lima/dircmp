@@ -13,21 +13,24 @@ pub enum Error {
 pub fn crawl(path: &std::path::Path, pool: &rayon::ThreadPool) -> Result<Vec<entry::Entry>, Error> {
     log::info!("Indexing {}", path.display());
     let start = std::time::Instant::now();
-    let entries = pool.install(|| init(path))?;
+
+    let entries = pool.install(|| {
+        let (sender, receiver) = std::sync::mpsc::channel();
+
+        let path_clone = path.to_path_buf();
+        worker::dispatcher::dispatch(path_clone, sender);
+
+        accumulate(&receiver, path)
+    })?;
+
     log::info!(
         "Finished indexing {} items for {} in {:?}",
         entries.len(),
         path.display(),
         start.elapsed(),
     );
-    Ok(entries)
-}
 
-fn init(path: &std::path::Path) -> Result<Vec<entry::Entry>, Error> {
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let path_clone = path.to_path_buf();
-    worker::dispatcher::dispatch(path_clone, sender);
-    accumulate(&receiver, path)
+    Ok(entries)
 }
 
 fn accumulate(
