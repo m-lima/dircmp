@@ -1,11 +1,17 @@
 mod entry;
-mod error;
 mod index;
 mod thread;
 
 pub use entry::{Entry, Status};
-pub use error::Error;
 pub use index::Index;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Thread(#[from] crate::thread::Error),
+    #[error(transparent)]
+    Index(#[from] crate::index::Error),
+}
 
 /// Compares two directories [`left`](std::path::PathBuf) and [`right`](std::path::PathBuf)
 /// returning the [`Index`](index::Index)
@@ -18,7 +24,7 @@ pub use index::Index;
 pub fn compare(
     left: std::path::PathBuf,
     right: std::path::PathBuf,
-) -> Result<(index::Index, index::Index), error::Error> {
+) -> Result<(index::Index, index::Index), Error> {
     let pool = thread::pool()?;
     let mut left = index::Index::new(left, &pool)?;
     let mut right = index::Index::new(right, &pool)?;
