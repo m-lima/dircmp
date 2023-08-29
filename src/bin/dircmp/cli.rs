@@ -52,52 +52,67 @@ fn fallible_run(
     );
     let (left, right) = dircmp::compare(left, right)?;
 
-    print(&left, &right, show_matched, false);
-    print(&right, &left, show_matched, true);
+    print(&left, &right, show_matched, Mode::Left);
+    print(&right, &left, show_matched, Mode::Right);
     Ok(())
 }
 
-fn print(reference: &dircmp::Index, other: &dircmp::Index, show_matched: bool, skip: bool) {
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum Mode {
+    Left,
+    Right,
+}
+
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mode::Left => f.write_str("<"),
+            Mode::Right => f.write_str(">"),
+        }
+    }
+}
+
+fn print(reference: &dircmp::Directory, other: &dircmp::Directory, show_matched: bool, mode: Mode) {
     println!("[37mVisiting:[m {}", reference.path().display());
     for index in reference.entries() {
         match index.status() {
-            dircmp::Status::Same(_) => {
-                if show_matched && !skip {
-                    println!("[32mMATCHES[m  {}", index.path().display());
+            status @ dircmp::Status::Same(_) => {
+                if show_matched && mode == Mode::Left {
+                    println!("[32m{mode} {status:<8}[m {}", index.path().display());
                 }
             }
-            dircmp::Status::Moved(i) => {
-                if !skip {
-                    println!("[33mMOVED[m    {}", index.path().display());
-                    println!("[33m└[m {}", unsafe {
+            status @ dircmp::Status::Moved(i) => {
+                if mode == Mode::Left {
+                    println!("[33m{mode} {status:<8}[m {}", index.path().display());
+                    println!("[33m  └[m {}", unsafe {
                         other.entries().get_unchecked(*i).path().display()
                     });
                 }
             }
-            dircmp::Status::Modified(i) => {
-                if !skip {
-                    println!("[35mMODIFIED[m {}", index.path().display());
-                    println!("[35m└[m {}", unsafe {
+            status @ dircmp::Status::Modified(i) => {
+                if mode == Mode::Left {
+                    println!("[35m{mode} {status:<8}[m {}", index.path().display());
+                    println!("[35m  └[m {}", unsafe {
                         other.entries().get_unchecked(*i).path().display()
                     });
                 }
             }
-            dircmp::Status::Maybe(indices) => {
+            status @ dircmp::Status::Maybe(indices) => {
                 let Some((tail, head)) = indices.split_last() else {
                     continue;
                 };
-                println!("[34mMAYBE[m    {}", index.path().display());
+                println!("[34m{mode} {status:<8}[m {}", index.path().display());
                 for i in head {
-                    println!("[34m├[m {}", unsafe {
+                    println!("[34m  ├[m {}", unsafe {
                         other.entries().get_unchecked(*i).path().display()
                     });
                 }
-                println!("[34m└[m {}", unsafe {
+                println!("[34m  └[m {}", unsafe {
                     other.entries().get_unchecked(*tail).path().display()
                 });
             }
-            dircmp::Status::Unique => {
-                println!("[31mUNIQUE[m   {}", index.path().display());
+            status @ dircmp::Status::Unique => {
+                println!("[31m{mode} {status:<8}[m {}", index.path().display());
             }
         }
     }

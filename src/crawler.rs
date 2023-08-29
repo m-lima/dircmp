@@ -90,7 +90,7 @@ mod worker {
         pub fn dispatch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Message>) {
             rayon::spawn(|| {
                 if let Err(e) = dispatch_internal(path, sender) {
-                    log::error!("Failed to send error from dispatcher: {e}");
+                    log::warn!("Failed to send error from dispatcher: {e}");
                 }
             });
         }
@@ -168,9 +168,9 @@ mod worker {
             if let Err(e) = hash_internal(path, sender) {
                 match e {
                     Error::Send(path) => {
-                        log::error!("Failed to send entry from hasher: {}", path.display());
+                        log::warn!("Failed to send entry from hasher: {}", path.display());
                     }
-                    e => log::error!("Failed to send error from hasher: {e}"),
+                    e => log::warn!("Failed to send error from hasher: {e}"),
                 }
             }
         }
