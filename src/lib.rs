@@ -1,9 +1,8 @@
 mod crawler;
-// TODO: rename
 mod entry;
 mod thread;
 
-pub use entry::{Entry, Index, Status};
+pub use entry::{Directory, Entry, Hash, Status};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -14,17 +13,18 @@ pub enum Error {
 }
 
 /// Compares two directories [`left`](std::path::PathBuf) and [`right`](std::path::PathBuf)
-/// returning the [`Index`](Index)
+/// returning the [`Directory`](entry::Directory)
 ///
 /// # Errors
 ///
 /// This is a fallible process and will fail-fast.
-/// In rare occasions, i.e. when worker threads are not able to send errors back up orchestrator,
-/// errors will be globbed and simply written into an [`Error`](log::Level::Error) log entry.
+/// In rare occasions, i.e. when worker threads are not able to send errors back up to the
+/// accumulator, errors will be globbed and simply written into an
+/// [`Error`](log::Level::Error) log entry.
 pub fn compare(
     left: std::path::PathBuf,
     right: std::path::PathBuf,
-) -> Result<(entry::Index, entry::Index), Error> {
+) -> Result<(entry::Directory, entry::Directory), Error> {
     let pool = thread::pool()?;
     let mut left_entries = crawler::crawl(&left, &pool)?;
     let mut right_entries = crawler::crawl(&right, &pool)?;
@@ -32,8 +32,8 @@ pub fn compare(
     first_pass(&mut left_entries, &mut right_entries, &pool);
     second_pass(&mut left_entries, &mut right_entries, &pool);
 
-    let left = entry::Index::new(left, left_entries);
-    let right = entry::Index::new(right, right_entries);
+    let left = entry::Directory::new(left, left_entries);
+    let right = entry::Directory::new(right, right_entries);
 
     Ok((left, right))
 }

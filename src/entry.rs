@@ -1,10 +1,10 @@
 #[derive(Debug)]
-pub struct Index {
+pub struct Directory {
     path: std::path::PathBuf,
     entries: Vec<Entry>,
 }
 
-impl Index {
+impl Directory {
     #[must_use]
     pub fn path(&self) -> &std::path::Path {
         &self.path
@@ -21,7 +21,7 @@ impl Index {
     }
 }
 
-impl Index {
+impl Directory {
     pub(crate) fn new(path: std::path::PathBuf, entries: Vec<Entry>) -> Self {
         Self { path, entries }
     }
