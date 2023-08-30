@@ -1,0 +1,152 @@
+import {
+  Button,
+  HorizontalBox,
+  TextEdit,
+  VerticalBox
+} from "std-widgets.slint";
+
+component MyButton {
+  in property<brush> background;
+  in property<length> radius: 0;
+  in property<string> text;
+  in property<length> text-size: 16px;
+  in property<bool> indent: false;
+
+  private property<brush> effective-color: touch.has-hover ? background.brighter(0.2) : background;
+
+  Rectangle {
+    background: @linear-gradient(
+      // TODO: On pressed, reverse this angle
+      0deg,
+      root.effective-color.darker(0.2) 0%,
+      root.effective-color.brighter(0.2) 100%
+    );
+    border-radius: root.radius;
+    min-height: text-size * 2;
+  }
+
+  touch := TouchArea {
+    mouse-cursor: pointer;
+  }
+
+  if (indent) : Text {
+    x: text.x - 1px;
+    y: text.y - 1px;
+    text: root.text;
+    font-size: root.text-size;
+
+    color: #000000;
+
+    horizontal-alignment: center;
+    vertical-alignment: center;
+    font-weight: 600;
+  }
+
+  if (indent) : Text {
+    x: text.x + 1px;
+    y: text.y + 1px;
+    text: root.text;
+    font-size: root.text-size;
+
+    color: #888888;
+
+    horizontal-alignment: center;
+    vertical-alignment: center;
+    font-weight: 600;
+  }
+
+  text := Text {
+    text: root.text;
+    font-size: root.text-size;
+
+    color: #444444;
+
+    horizontal-alignment: center;
+    vertical-alignment: center;
+    font-weight: 600;
+  }
+}
+
+export component MainWindow inherits Window {
+  title: "DirCmp";
+  width: target-width * 1px;
+  height: target-height * 1px;
+  icon: @image-url("res/icon.png");
+  background: #333333;
+
+  callback yo <=> btn.clicked;
+
+  private property <bool> flipped: false;
+  private property <int> target-width: 800;
+  private property <int> target-height: 800;
+  in property <int> bla: 0;
+
+  animate width, height {
+    duration: 200ms;
+  }
+
+  VerticalBox {
+    alignment: start;
+    Text {
+      text: "The screen is " + (flipped ? "flipped" : "regular");
+    }
+
+    callback clicked <=> btn.clicked;
+
+    btn := Button {
+      text: "yooo";
+    }
+
+    MyButton {
+      text: "test";
+      text-size: 48px;
+      background: #008000;
+    }
+
+    MyButton {
+      text: "test";
+      text-size: 18px;
+      background: #008000;
+    }
+
+    MyButton {
+      text: "test";
+      text-size: 48px;
+      indent: true;
+      background: #008000;
+    }
+
+    MyButton {
+      text: "test";
+      text-size: 18px;
+      indent: true;
+      background: #008000;
+    }
+
+    Button {
+      text: "Quit";
+
+      clicked => {
+        flipped = !flipped;
+        if (flipped) {
+          root.width = 800px;
+          root.height = 400px;
+        } else {
+          root.width = 400px;
+          root.height = 800px;
+        }
+      }
+    }
+
+    HorizontalBox {
+      TextInput {
+        height: bttn.height;
+      }
+      bttn := MyButton {
+        text: "Open";
+        background: #ff000080;
+        height: 50px;
+      }
+    }
+  }
+}
