@@ -3,7 +3,7 @@ import QtQuick.Controls as C
 import Qt.labs.platform as P
 
 Q.DropArea {
-  id: control
+  id: root
 
   function toURL(url) {
     return new URL(url);
@@ -31,7 +31,7 @@ Q.DropArea {
     validator: Q.RegularExpressionValidator {
       regularExpression: /.+\//
     }
-    palette.base: !text || acceptableInput ? control.palette.base : '#352020'
+    palette.base: !text || acceptableInput ? root.palette.base : '#352020'
 
     onPressed: folderDialog.open()
   }

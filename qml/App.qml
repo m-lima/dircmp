@@ -14,6 +14,9 @@ C.ApplicationWindow {
 
     mid: '#808080'
 
+    button: '#444444'
+    buttonText: '#aaaaaa'
+
     highlight: '#006000'
     highlightedText: '#cccccc'
 
@@ -22,25 +25,23 @@ C.ApplicationWindow {
     windowText: '#cccccc'
   }
 
-  // Button {
-  //   text: 'Yo'
-  // }
-
   DirectoryInput {
     anchors {
       top: parent.top
     }
   }
-  BigButton {
-    id: next
 
-    color: 'green'
-    palette.buttonText: '#252525'
+  Navigation {
+    onNext: showBack = true
+    onBack: showBack = false
 
-    height: parent.height
-
-    text: 'Big guy'
+    anchors {
+      bottom: parent.bottom
+      right: parent.right
+      left: parent.left
+    }
   }
+
   DirectoryInput {
     x: 200
   }

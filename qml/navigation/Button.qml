@@ -2,15 +2,19 @@ import QtQuick as Q
 import QtQuick.Templates as T
 
 T.Button {
-  id: control
+  id: root
 
   property Q.color color: palette.button
   property Q.color textColor: palette.buttonText
 
-  implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
-                          implicitContentWidth + leftPadding + rightPadding)
-  implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
-                           implicitContentHeight + topPadding + bottomPadding)
+  implicitWidth: Math.max(
+    implicitBackgroundWidth + leftInset + rightInset,
+    implicitContentWidth + leftPadding + rightPadding
+  )
+  implicitHeight: Math.max(
+    implicitBackgroundHeight + topInset + bottomInset,
+    implicitContentHeight + topPadding + bottomPadding
+  )
 
   padding: 6
   spacing: 6
@@ -22,21 +26,21 @@ T.Button {
   }
 
   contentItem: Q.Text {
-    horizontalAlignment: Q.Text.AlignCenter
+    horizontalAlignment: Q.Text.AlignHCenter
     verticalAlignment: Q.Text.AlignVCenter
-    text: control.text
-    font: control.font
-    color: control.textColor
+    text: root.text
+    font: root.font
+    color: root.textColor
   }
 
   background: Q.Rectangle {
     id: background
 
-    color: control.down
-      ? control.color.darker(1.1)
-      : control.hovered
-        ? control.color.lighter(1.1)
-        : control.color
+    color: root.down
+      ? root.color.darker(1.1)
+      : root.hovered
+        ? root.color.lighter(1.1)
+        : root.color
 
     gradient: gradient
 
