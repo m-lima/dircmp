@@ -1,6 +1,7 @@
 qmetaobject::qrc!(qml, "qml" as "/" {
     "qtquickcontrols2.conf",
     "App.qml",
+    "Main.qml",
     "Navigation.qml",
     "navigation/Button.qml",
     "DirectoryInput.qml",

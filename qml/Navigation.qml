@@ -5,21 +5,18 @@ import "navigation"
 Q.Item {
   id: root
 
-  property bool showBack: false
-
   signal back()
   signal next()
 
+  function showBack(bool) { state = bool ? 'withBack' : 'noBack' }
+
   implicitHeight: 50
+  state: 'noBack'
 
   Button {
     id: back
 
     text: 'Back'
-    // color: '#803030'
-    // textColor: '#252525'
-    // TODO: This expression coupled with the animation, makes it wonky to resize the window
-    width: root.showBack ? parent.width / 2 : 0
 
     anchors {
       top: parent.top
@@ -27,13 +24,8 @@ Q.Item {
       left: parent.left
     }
 
-    Q.Behavior on width {
-      Q.NumberAnimation {
-        duration: 200
-      }
-    }
-
     onClicked: root.back()
+
   }
 
   Button {
@@ -52,4 +44,32 @@ Q.Item {
 
     onClicked: root.next()
   }
+
+  states: [
+    Q.State {
+      name: 'noBack'
+
+      Q.PropertyChanges {
+        target: back
+        width: 0
+      }
+    },
+    Q.State {
+      name: 'withBack'
+
+      Q.PropertyChanges {
+        target: back
+        width: root.width / 2
+      }
+    }
+  ]
+
+  transitions: [
+    Q.Transition {
+      Q.NumberAnimation {
+        duration: 200
+        property: 'width'
+      }
+    }
+  ]
 }
