@@ -29,8 +29,6 @@ Q.Item {
   }
 
   Button {
-    id: next
-
     color: '#008000'
     textColor: '#252525'
     text: 'Next'

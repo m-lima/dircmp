@@ -1,6 +1,7 @@
 import QtQuick as Q
-import QtQuick.Controls as C
 import Qt.labs.platform as P
+
+import "directoryInput"
 
 Q.DropArea {
   id: root
@@ -18,13 +19,15 @@ Q.DropArea {
     return true;
   }
 
-  width: parent.width
+  implicitWidth: textField.width + button.width
+  implicitHeight: textField.height
+
   height: parent.height
   keys: ['text/uri-list']
   onEntered: (evt) => evt.accepted = evt.urls.map(toURL).filter(isDir).length === 1
   onDropped: (evt) => set(evt.urls) && evt.accept()
 
-  C.TextField {
+  TextField {
     id: textField
 
     placeholderText: 'Path to directory to compare'
@@ -34,6 +37,10 @@ Q.DropArea {
     palette.base: !text || acceptableInput ? root.palette.base : '#352020'
 
     onPressed: folderDialog.open()
+  }
+
+  Button {
+    id: button
   }
 
   P.FolderDialog {
