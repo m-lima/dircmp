@@ -14,3 +14,6 @@ simplelog = "0.12.1"
 slint = "1.1.1"
 thiserror = "1.0.47"
 time = "0.3.28"
+
+[build-dependencies]
+slint-build = "1.1.1"
