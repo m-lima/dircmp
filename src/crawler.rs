@@ -2,8 +2,10 @@ use super::entry;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    Worker(#[from] worker::Error),
+    #[error("Scanner error: {0}")]
+    Scanner(#[from] worker::ScannerError),
+    #[error("Hasher error: {0}")]
+    Hasher(#[from] worker::HasherError),
     #[error("Failed to strip base prefix `{0}` from `{1}`")]
     StripPrefix(std::path::PathBuf, std::path::PathBuf),
     #[error("Full collision detected for `{0}`")]
@@ -44,16 +46,17 @@ fn accumulate(
 
     while let Ok(message) = receiver.recv() {
         let (hash, path) = match message {
-            worker::Message::Queued => {
+            worker::Message::Scanner(worker::ScannerMessage::Error(e)) => return Err(e.into()),
+            worker::Message::Hasher(worker::HasherMessage::Error(e)) => return Err(e.into()),
+            worker::Message::Scanner(worker::ScannerMessage::Queued) => {
                 total += 1;
                 continue;
             }
-            worker::Message::Done => {
+            worker::Message::Scanner(worker::ScannerMessage::Done) => {
                 done = true;
                 continue;
             }
-            worker::Message::Hash(hash, path) => (hash, path),
-            worker::Message::Error(e) => return Err(Error::Worker(e)),
+            worker::Message::Hasher(worker::HasherMessage::Hash(hash, path)) => (hash, path),
         };
 
         let entry = entry::Entry::new(&path, base, hash)
@@ -69,19 +72,12 @@ fn accumulate(
         if len & (2048 - 1) == 0 {
             let elapsed = start.elapsed().as_secs();
             if elapsed > 0 {
-                if done {
-                    log::debug!(
-                        "Indexed {len}/{total} [{percentage}%] items at {rate} items/s",
-                        rate = len as u64 / elapsed,
-                        percentage = len * 100 / total,
-                    );
-                } else {
-                    log::debug!(
-                        "Indexed {len}/{total} [{percentage}%] items at {rate} items/s (still scanning)",
-                        rate = len as u64 / elapsed,
-                        percentage = len * 100 / total,
-                    );
-                }
+                log::debug!(
+                    "Indexed {len}/{total} [{percentage}%] items at {rate} items/s{scanning}",
+                    rate = len as u64 / elapsed,
+                    percentage = len * 100 / total,
+                    scanning = if done { "" } else { " (still scanning)" },
+                );
             }
         }
     }
@@ -91,25 +87,37 @@ fn accumulate(
 
 mod worker {
     use crate::entry::Hash;
-    // pub type Message = Result<(Hash, std::path::PathBuf), Error>;
+    pub use hasher::{Error as HasherError, Message as HasherMessage};
+    pub use scanner::{Error as ScannerError, Message as ScannerMessage};
 
     pub enum Message {
-        Queued,
-        Done,
-        Hash(Hash, std::path::PathBuf),
-        Error(Error),
+        Scanner(scanner::Message),
+        Hasher(hasher::Message),
+    }
+
+    impl From<scanner::Message> for Message {
+        fn from(value: scanner::Message) -> Self {
+            Self::Scanner(value)
+        }
+    }
+
+    impl From<hasher::Message> for Message {
+        fn from(value: hasher::Message) -> Self {
+            Self::Hasher(value)
+        }
     }
 
     #[derive(Debug, thiserror::Error)]
-    pub enum Error {
-        #[error("Scanner error: {0}")]
-        Scanner(#[from] scanner::Error),
-        #[error("Hasher error: {0}")]
-        Hasher(#[from] hasher::Error),
-    }
+    pub enum Error {}
 
     pub mod scanner {
-        use super::{Error as WorkerError, Message};
+        use super::Message as WorkerMessage;
+
+        pub enum Message {
+            Queued,
+            Done,
+            Error(Error),
+        }
 
         #[derive(Debug, thiserror::Error)]
         pub enum Error {
@@ -117,20 +125,24 @@ mod worker {
             DirUnreadable(std::path::PathBuf, std::io::Error),
             #[error("Could not read directory entry for `{0}`: {1}")]
             EntryUnreadable(std::path::PathBuf, std::io::Error),
+            #[error("Failed to send queue signal")]
+            Send,
         }
 
-        pub fn scan(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Message>) {
+        pub fn scan(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<WorkerMessage>) {
             rayon::spawn(move || {
                 if let Err(e) = scan_internal(path, sender.clone()) {
                     log::warn!("Failed to send error from scanner: {e}");
                 }
-                sender.send(Message::Done).unwrap();
+                if let Err(e) = sender.send(Message::Done.into()) {
+                    log::warn!("Failed to send done signal from scanner: {e}");
+                }
             });
         }
 
         fn scan_internal(
             path: std::path::PathBuf,
-            sender: std::sync::mpsc::Sender<Message>,
+            sender: std::sync::mpsc::Sender<WorkerMessage>,
         ) -> Result<(), Error> {
             let dir = match scan_dir(&path) {
                 Ok(dir) => dir,
@@ -140,15 +152,12 @@ mod worker {
                     // execution.
                     // If the send fails, repeat the error back out.
                     return sender
-                        .send(Message::Error(WorkerError::Scanner(e)))
+                        .send(Message::Error(e).into())
                         .map_err(|e| match e.0 {
-                            Message::Error(WorkerError::Scanner(e)) => e,
-                            Message::Queued
-                            | Message::Done
-                            | Message::Hash(_, _)
-                            | Message::Error(WorkerError::Hasher(_)) => {
+                            WorkerMessage::Scanner(Message::Error(e)) => e,
+                            _ => {
                                 unreachable!(
-                                    "Cannot fail to send anything other than a Error::Scanner"
+                                    "Cannot fail to send anything other than a scanner::Message::Error"
                                 )
                             }
                         });
@@ -171,7 +180,12 @@ mod worker {
                 if is_dir {
                     scan_internal(path, sender)?;
                 } else {
-                    sender.send(Message::Queued).unwrap();
+                    sender.send(Message::Queued.into()).map_err(|e| match e.0 {
+                        WorkerMessage::Scanner(Message::Queued) => Error::Send,
+                        _ => unreachable!(
+                            "Cannot fail to send anything other than a scanner::Message::Queue"
+                        ),
+                    })?;
                     rayon::spawn(move || super::hasher::hash(path, sender));
                 }
             }
@@ -191,7 +205,12 @@ mod worker {
     }
 
     mod hasher {
-        use super::{Error as WorkerError, Message};
+        use super::{Hash, Message as WorkerMessage};
+
+        pub enum Message {
+            Hash(Hash, std::path::PathBuf),
+            Error(Error),
+        }
 
         #[derive(Debug, thiserror::Error)]
         pub enum Error {
@@ -203,7 +222,7 @@ mod worker {
             Send(std::path::PathBuf),
         }
 
-        pub fn hash(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Message>) {
+        pub fn hash(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<WorkerMessage>) {
             if let Err(e) = hash_internal(path, sender) {
                 match e {
                     Error::Send(path) => {
@@ -216,18 +235,16 @@ mod worker {
 
         fn hash_internal(
             path: std::path::PathBuf,
-            sender: std::sync::mpsc::Sender<Message>,
+            sender: std::sync::mpsc::Sender<WorkerMessage>,
         ) -> Result<(), Error> {
             macro_rules! send {
                 ($value: expr) => {
-                    sender.send($value).map_err(|e| match e.0 {
-                        Message::Hash(_, path) => Error::Send(path),
-                        Message::Error(WorkerError::Hasher(e)) => e,
-                        Message::Done
-                        | Message::Queued
-                        | Message::Error(WorkerError::Scanner(_)) => {
+                    sender.send($value.into()).map_err(|e| match e.0 {
+                        WorkerMessage::Hasher(Message::Hash(_, path)) => Error::Send(path),
+                        WorkerMessage::Hasher(Message::Error(e)) => e,
+                        WorkerMessage::Scanner(_) => {
                             unreachable!(
-                                "Cannot fail to send anything other than a Hash or a Error::Hasher"
+                                "Cannot fail to send anything other than a hasher::Message"
                             )
                         }
                     })
