@@ -32,6 +32,27 @@ pub fn crawl(path: &std::path::Path, pool: &rayon::ThreadPool) -> Result<Vec<ent
         start.elapsed(),
     );
 
+    if let Some(first) = entries.first() {
+        assert!(
+            entries
+                .iter()
+                .scan(first, |state, curr| {
+                    let result = curr >= state;
+                    *state = curr;
+                    Some(result)
+                })
+                .all(|a| a),
+            "Entries are not sorted"
+        );
+
+        log::info!(
+            "Finished indexing {} items for {} in {:?}",
+            entries.len(),
+            path.display(),
+            start.elapsed(),
+        );
+    }
+
     Ok(entries)
 }
 
@@ -39,8 +60,42 @@ fn accumulate(
     receiver: &std::sync::mpsc::Receiver<worker::Message>,
     base: &std::path::Path,
 ) -> Result<Vec<entry::Entry>, Error> {
-    let mut paths = Vec::new();
+    let mut paths = [
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ];
     let mut total = 0;
+    let mut hashes = 0;
     let mut done = false;
     let start = std::time::Instant::now();
 
@@ -59,30 +114,33 @@ fn accumulate(
             worker::Message::Hasher(worker::HasherMessage::Hash(hash, path)) => (hash, path),
         };
 
+        let bucket = usize::from(hash.first_byte() >> 3);
+        let bucket = unsafe { paths.get_unchecked_mut(bucket) };
+
         let entry = entry::Entry::new(&path, base, hash)
             .map_err(|_| Error::StripPrefix(base.to_path_buf(), path))?;
 
-        let Err(index) = paths.binary_search(&entry) else {
+        let Err(index) = bucket.binary_search(&entry) else {
             return Err(Error::FullCollision(entry.path));
         };
 
-        paths.insert(index, entry);
+        bucket.insert(index, entry);
+        hashes += 1;
 
-        let len = paths.len();
-        if len & (2048 - 1) == 0 {
+        if hashes & (2048 - 1) == 0 {
             let elapsed = start.elapsed().as_secs();
             if elapsed > 0 {
                 log::debug!(
-                    "Indexed {len}/{total} [{percentage}%] items at {rate} items/s{scanning}",
-                    rate = len as u64 / elapsed,
-                    percentage = len * 100 / total,
+                    "Indexed {hashes}/{total} [{percentage}%] items at {rate} items/s{scanning}",
+                    rate = hashes / elapsed,
+                    percentage = hashes * 100 / total,
                     scanning = if done { "" } else { " (still scanning)" },
                 );
             }
         }
     }
 
-    Ok(paths)
+    Ok(paths.into_iter().flatten().collect())
 }
 
 mod worker {

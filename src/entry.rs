@@ -82,6 +82,13 @@ impl std::cmp::PartialOrd for Entry {
     }
 }
 
+impl std::hash::Hash for Entry {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+        self.path.hash(state);
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Hash([u8; 16]);
 
@@ -96,6 +103,16 @@ impl Hash {
             *byte -= 1;
         }
         Self(hash)
+    }
+
+    pub(crate) fn first_byte(&self) -> u8 {
+        unsafe { *self.0.get_unchecked(0) }
+    }
+}
+
+impl std::hash::Hash for Hash {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u128(u128::from_be_bytes(self.0));
     }
 }
 
