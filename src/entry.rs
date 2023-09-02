@@ -157,25 +157,3 @@ impl std::cmp::PartialOrd for Status {
         Some(self.cmp(other))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn hex_print() {
-        let bytes = [0x45, 0xaa, 0x00, 0xa, 0xa0, 0xff, 0x80, 0x33];
-        let le = u64::from_le_bytes(bytes);
-        let be = u64::from_be_bytes(bytes);
-        let ne = u64::from_ne_bytes(bytes);
-
-        let expected = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-
-        println!("Expected: {expected}");
-        println!("Little:   {le:08x}");
-        println!("Big:      {be:08x}");
-        println!("Native:   {ne:08x}");
-
-        assert_eq!(format!("{le:08x}"), expected);
-        assert_eq!(format!("{be:08x}"), expected);
-        assert_eq!(format!("{ne:08x}"), expected);
-    }
-}
