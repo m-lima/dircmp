@@ -22,7 +22,7 @@ pub fn run(args: args::Command) -> std::process::ExitCode {
         args::Command::Scan(args) => {
             let start = std::time::Instant::now();
 
-            if let Err(e) = scan(args.left, args.right, args.output, args.print) {
+            if let Err(e) = scan(args.left, args.right, args.output, args.summary, args.print) {
                 log::error!("{e}");
                 return std::process::ExitCode::FAILURE;
             }
@@ -67,6 +67,7 @@ fn scan(
     left: std::path::PathBuf,
     right: std::path::PathBuf,
     output: Option<std::sync::Arc<std::fs::File>>,
+    summary: Option<std::sync::Arc<std::fs::File>>,
     print_filter: args::PrintFilter,
 ) -> Result<(), Error> {
     log::debug!(
@@ -85,10 +86,22 @@ fn scan(
         log::info!("Finished writing to output file in {:?}", start.elapsed());
     }
 
+    let (left, right) = result;
+
+    if let Some(output) = summary {
+        let start = std::time::Instant::now();
+        log::info!("Writing summary to output file");
+        write_summary(output.as_ref(), &left, &right, Mode::Left)?;
+        write_summary(output.as_ref(), &right, &left, Mode::Right)?;
+        log::info!(
+            "Finished writing summary to output file in {:?}",
+            start.elapsed()
+        );
+    }
+
     match print_filter {
         args::PrintFilter::None => {}
         filter => {
-            let (left, right) = result;
             write(&left, &right, filter == args::PrintFilter::All, Mode::Left)?;
             write(&right, &left, filter == args::PrintFilter::All, Mode::Right)?;
         }
@@ -130,16 +143,16 @@ fn write(
 
     let mut out = std::io::stdout().lock();
     writeln!(out, "[37mVisiting:[m {}", reference.path().display())?;
-    for index in reference.entries() {
-        match index.status() {
+    for entry in reference.entries() {
+        match entry.status() {
             status @ dircmp::Status::Same(_) => {
                 if show_matched && mode == Mode::Left {
-                    writeln!(out, "[32m{mode} {status:<8}[m {}", index.path().display())?;
+                    writeln!(out, "[32m{mode} {status:<8}[m {}", entry.path().display())?;
                 }
             }
             status @ dircmp::Status::Moved(i) => {
                 if mode == Mode::Left {
-                    writeln!(out, "[33m{mode} {status:<8}[m {}", index.path().display())?;
+                    writeln!(out, "[33m{mode} {status:<8}[m {}", entry.path().display())?;
                     writeln!(out, "[33m  └[m {}", unsafe {
                         other.entries().get_unchecked(*i).path().display()
                     })?;
@@ -147,7 +160,7 @@ fn write(
             }
             status @ dircmp::Status::Modified(i) => {
                 if mode == Mode::Left {
-                    writeln!(out, "[35m{mode} {status:<8}[m {}", index.path().display())?;
+                    writeln!(out, "[35m{mode} {status:<8}[m {}", entry.path().display())?;
                     writeln!(out, "[35m  └[m {}", unsafe {
                         other.entries().get_unchecked(*i).path().display()
                     })?;
@@ -157,7 +170,7 @@ fn write(
                 let Some((tail, head)) = indices.split_last() else {
                     continue;
                 };
-                writeln!(out, "[34m{mode} {status:<8}[m {}", index.path().display())?;
+                writeln!(out, "[34m{mode} {status:<8}[m {}", entry.path().display())?;
                 for i in head {
                     writeln!(out, "[34m  ├[m {}", unsafe {
                         other.entries().get_unchecked(*i).path().display()
@@ -168,7 +181,56 @@ fn write(
                 })?;
             }
             status @ dircmp::Status::Unique => {
-                writeln!(out, "[31m{mode} {status:<8}[m {}", index.path().display())?;
+                writeln!(out, "[31m{mode} {status:<8}[m {}", entry.path().display())?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn write_summary(
+    mut out: impl std::io::Write,
+    reference: &dircmp::Directory,
+    other: &dircmp::Directory,
+    mode: Mode,
+) -> std::io::Result<()> {
+    for entry in reference.entries() {
+        match entry.status() {
+            dircmp::Status::Same(_) => {}
+            status @ (dircmp::Status::Moved(i) | dircmp::Status::Modified(i)) => {
+                if mode == Mode::Left {
+                    writeln!(
+                        out,
+                        "{path}	{status}	{other}",
+                        path = reference.path().join(entry.path()).display(),
+                        other = other
+                            .path()
+                            .join(unsafe { other.entries().get_unchecked(*i).path() })
+                            .display()
+                    )?;
+                }
+            }
+            status @ dircmp::Status::Maybe(indices) => {
+                write!(out, "{path}	{status}", path = entry.path().display())?;
+                for i in indices {
+                    write!(
+                        out,
+                        "	{path}",
+                        path = other
+                            .path()
+                            .join(unsafe { other.entries().get_unchecked(*i).path() })
+                            .display()
+                    )?;
+                }
+                writeln!(out)?;
+            }
+            status @ dircmp::Status::Unique => {
+                writeln!(
+                    out,
+                    "{path}	{status}",
+                    path = reference.path().join(entry.path()).display(),
+                )?;
             }
         }
     }
