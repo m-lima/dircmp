@@ -18,7 +18,7 @@ pub fn crawl(path: &std::path::Path, pool: &rayon::ThreadPool) -> Result<Vec<ent
         let (sender, receiver) = std::sync::mpsc::channel();
 
         let path_clone = path.to_path_buf();
-        worker::dispatcher::dispatch(path_clone, sender);
+        worker::scanner::scan(path_clone, sender);
 
         accumulate(&receiver, path)
     })?;
@@ -38,10 +38,23 @@ fn accumulate(
     base: &std::path::Path,
 ) -> Result<Vec<entry::Entry>, Error> {
     let mut paths = Vec::new();
+    let mut total = 0;
+    let mut done = false;
     let start = std::time::Instant::now();
 
-    while let Ok(result) = receiver.recv() {
-        let (hash, path) = result?;
+    while let Ok(message) = receiver.recv() {
+        let (hash, path) = match message {
+            worker::Message::Queued => {
+                total += 1;
+                continue;
+            }
+            worker::Message::Done => {
+                done = true;
+                continue;
+            }
+            worker::Message::Hash(hash, path) => (hash, path),
+            worker::Message::Error(e) => return Err(Error::Worker(e)),
+        };
 
         let entry = entry::Entry::new(&path, base, hash)
             .map_err(|_| Error::StripPrefix(base.to_path_buf(), path))?;
@@ -56,7 +69,19 @@ fn accumulate(
         if len & (2048 - 1) == 0 {
             let elapsed = start.elapsed().as_secs();
             if elapsed > 0 {
-                log::debug!("Indexed {len} items at {} items/s", len as u64 / elapsed);
+                if done {
+                    log::debug!(
+                        "Indexed {len}/{total} [{percentage}%] items at {rate} items/s",
+                        rate = len as u64 / elapsed,
+                        percentage = len * 100 / total,
+                    );
+                } else {
+                    log::debug!(
+                        "Indexed {len}/{total} [{percentage}%] items at {rate} items/s (still scanning)",
+                        rate = len as u64 / elapsed,
+                        percentage = len * 100 / total,
+                    );
+                }
             }
         }
     }
@@ -66,17 +91,24 @@ fn accumulate(
 
 mod worker {
     use crate::entry::Hash;
-    pub type Message = Result<(Hash, std::path::PathBuf), Error>;
+    // pub type Message = Result<(Hash, std::path::PathBuf), Error>;
+
+    pub enum Message {
+        Queued,
+        Done,
+        Hash(Hash, std::path::PathBuf),
+        Error(Error),
+    }
 
     #[derive(Debug, thiserror::Error)]
     pub enum Error {
-        #[error("Dispatcher error: {0}")]
-        Dispatcher(#[from] dispatcher::Error),
+        #[error("Scanner error: {0}")]
+        Scanner(#[from] scanner::Error),
         #[error("Hasher error: {0}")]
         Hasher(#[from] hasher::Error),
     }
 
-    pub mod dispatcher {
+    pub mod scanner {
         use super::{Error as WorkerError, Message};
 
         #[derive(Debug, thiserror::Error)]
@@ -87,15 +119,16 @@ mod worker {
             EntryUnreadable(std::path::PathBuf, std::io::Error),
         }
 
-        pub fn dispatch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Message>) {
-            rayon::spawn(|| {
-                if let Err(e) = dispatch_internal(path, sender) {
-                    log::warn!("Failed to send error from dispatcher: {e}");
+        pub fn scan(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<Message>) {
+            rayon::spawn(move || {
+                if let Err(e) = scan_internal(path, sender.clone()) {
+                    log::warn!("Failed to send error from scanner: {e}");
                 }
+                sender.send(Message::Done).unwrap();
             });
         }
 
-        fn dispatch_internal(
+        fn scan_internal(
             path: std::path::PathBuf,
             sender: std::sync::mpsc::Sender<Message>,
         ) -> Result<(), Error> {
@@ -107,11 +140,16 @@ mod worker {
                     // execution.
                     // If the send fails, repeat the error back out.
                     return sender
-                        .send(Err(WorkerError::Dispatcher(e)))
+                        .send(Message::Error(WorkerError::Scanner(e)))
                         .map_err(|e| match e.0 {
-                            Err(WorkerError::Dispatcher(e)) => e,
-                            Ok(_) | Err(WorkerError::Hasher(_)) => {
-                                unreachable!("Cannot fail to send a dispatcher error")
+                            Message::Error(WorkerError::Scanner(e)) => e,
+                            Message::Queued
+                            | Message::Done
+                            | Message::Hash(_, _)
+                            | Message::Error(WorkerError::Hasher(_)) => {
+                                unreachable!(
+                                    "Cannot fail to send anything other than a Error::Scanner"
+                                )
                             }
                         });
                 }
@@ -131,8 +169,9 @@ mod worker {
 
                 let sender = sender.clone();
                 if is_dir {
-                    dispatch_internal(path, sender)?;
+                    scan_internal(path, sender)?;
                 } else {
+                    sender.send(Message::Queued).unwrap();
                     rayon::spawn(move || super::hasher::hash(path, sender));
                 }
             }
@@ -182,10 +221,14 @@ mod worker {
             macro_rules! send {
                 ($value: expr) => {
                     sender.send($value).map_err(|e| match e.0 {
-                        Ok((_, path)) => Error::Send(path),
-                        Err(WorkerError::Hasher(e)) => e,
-                        Err(WorkerError::Dispatcher(_)) => {
-                            unreachable!("Cannot fail to send a dispatcher error")
+                        Message::Hash(_, path) => Error::Send(path),
+                        Message::Error(WorkerError::Hasher(e)) => e,
+                        Message::Done
+                        | Message::Queued
+                        | Message::Error(WorkerError::Scanner(_)) => {
+                            unreachable!(
+                                "Cannot fail to send anything other than a Hash or a Error::Hasher"
+                            )
                         }
                     })
                 };
@@ -195,7 +238,7 @@ mod worker {
                 ($match: expr) => {
                     match $match {
                         Ok(ok) => ok,
-                        Err(e) => return send!(Err(e.into())),
+                        Err(e) => return send!(Message::Error(e.into())),
                     }
                 };
             }
@@ -226,7 +269,7 @@ mod worker {
                 hasher.update(&buffer[..bytes]);
             }
 
-            send!(Ok((super::Hash::new(hasher.finalize()), path)))?;
+            send!(Message::Hash(super::Hash::new(hasher.finalize()), path))?;
 
             drop(sender);
             Ok(())
