@@ -79,7 +79,10 @@ fn scan(
     let result = dircmp::compare(left, right)?;
 
     if let Some(output) = output {
+        let start = std::time::Instant::now();
+        log::info!("Writing to output file");
         serde_yaml::to_writer(output.as_ref(), &result).map_err(Error::Write)?;
+        log::info!("Finished writing to output file in {:?}", start.elapsed());
     }
 
     match print_filter {
