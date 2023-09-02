@@ -1,3 +1,13 @@
+# Development
+
+## QML location for `qmlls`
+> qmlls could not find a build directory, without a build directory containing a current build there could be spurious warnings, you might want to pass the --build-dir <buildDir> option to qmlls, or set the environment variable QMLLS_BUILD_DIRS
+
+If QT is not globally installed, and the `INSTALL_PREFIX` for QT does not point to its current location, `qmlls` will not work. The value to set the env var is:
+```bash
+$ QMLLS_BUILD_DIRS=<PATH_TO_QT>/share/qt/qml
+```
+
 # Build
 
 ## QT location

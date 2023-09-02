@@ -1,16 +1,18 @@
 import QtQuick as Q
+import QtQuick.Controls as C
 
 Q.Item {
   SlidingContainer {
     id: slidingContainer
 
-    DirectoryInput {
+    // TODO: Make my own drop location
+    C.TextField {
       anchors {
         top: parent.top
       }
     }
 
-    DirectoryInput {
+    C.TextField {
       x: 200
     }
   }

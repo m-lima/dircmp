@@ -1,3 +1,5 @@
+mod qobject;
+
 qmetaobject::qrc!(qml, "qml" as "/" {
     "qtquickcontrols2.conf",
     "App.qml",
