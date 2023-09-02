@@ -8,6 +8,8 @@ clap = { version = "4.4.0", features = ["derive"] }
 log = "0.4.20"
 md-5 = "0.10.5"
 rayon = "1.7.0"
+serde = { version = "1.0.188", features = ["derive"] }
+serde_yaml = "0.9.25"
 simplelog = "0.12.1"
 thiserror = "1.0.47"
 time = "0.3.28"

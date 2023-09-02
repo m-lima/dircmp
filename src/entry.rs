@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Directory {
     path: std::path::PathBuf,
     entries: Vec<Entry>,
@@ -27,7 +27,7 @@ impl Directory {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
     pub(crate) hash: Hash,
     pub(crate) path: std::path::PathBuf,
@@ -113,7 +113,26 @@ impl std::fmt::UpperHex for Hash {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+impl serde::ser::Serialize for Hash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        u128::from_be_bytes(self.0).serialize(serializer)
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for Hash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let num = u128::deserialize(deserializer)?;
+        Ok(Self(num.to_be_bytes()))
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Status {
     Same(usize),
     Moved(usize),
