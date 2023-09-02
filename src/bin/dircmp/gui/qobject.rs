@@ -1,7 +1,7 @@
 use qmetaobject::{QAbstractListModel, QObject};
 
 #[derive(Default, qmetaobject::QObject)]
-struct Cmp {
+struct Comparator {
     base: qmetaobject::qt_base_class!(trait QObject),
     compare: qmetaobject::qt_method!(fn(&mut self, left: String, right: String)),
     results: qmetaobject::qt_signal!(list: std::cell::RefCell<Results>),
@@ -9,12 +9,12 @@ struct Cmp {
     error: qmetaobject::qt_signal!(message: String),
 }
 
-impl Cmp {
+impl Comparator {
     fn compare(&mut self, left: String, right: String) {
-        let send_results = qmetaobject::queued_callback(move |results| {
-            // let results = results.into();
-            self.results(results);
-        });
+        // let send_results = qmetaobject::queued_callback(move |results| {
+        //     // let results = results.into();
+        //     self.results(results);
+        // });
 
         let send_error = qmetaobject::queued_callback(move |message| {
             self.error(message);
@@ -72,10 +72,13 @@ impl QAbstractListModel for Results {
             .get(index)
             .and_then(|item| {
                 if role == qmetaobject::USER_ROLE {
-                    Some(qmetaobject::QString::from(
+                    Some(qmetaobject::QVariant::from(qmetaobject::QString::from(
                         item.path().to_string_lossy().into_owned(),
-                    ))
+                    )))
                 } else if role == qmetaobject::USER_ROLE + 1 {
+                    Some(qmetaobject::QVariant::from(qmetaobject::QString::from(
+                        item.status().as_str(),
+                    )))
                 } else {
                     None
                 }
@@ -101,4 +104,7 @@ impl QAbstractListModel for Results {
 
 #[derive(qmetaobject::QEnum)]
 #[repr(u8)]
-enum Status {}
+enum Status {
+    Same,
+    Moved,
+}

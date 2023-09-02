@@ -170,18 +170,23 @@ impl Status {
             Status::Empty => 5,
         }
     }
+
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Status::Same(_) => "SAME",
+            Status::Moved(_) => "MOVED",
+            Status::Modified(_) => "MODIFIED",
+            Status::Maybe(_) => "MAYBE",
+            Status::Unique => "UNIQUE",
+            Status::Empty => "EMPTY",
+        }
+    }
 }
 
 impl std::fmt::Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Status::Same(_) => f.write_str("SAME"),
-            Status::Moved(_) => f.write_str("MOVED"),
-            Status::Modified(_) => f.write_str("MODIFIED"),
-            Status::Maybe(_) => f.write_str("MAYBE"),
-            Status::Unique => f.write_str("UNIQUE"),
-            Status::Empty => f.write_str("EMPTY"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
