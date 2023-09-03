@@ -5,9 +5,9 @@ pub enum Error {
     #[error(transparent)]
     Dircmp(#[from] dircmp::Error),
     #[error("Could not write entries: {0}")]
-    Write(serde_yaml::Error),
+    Write(bincode::Error),
     #[error("Could not read entries: {0}")]
-    Read(serde_yaml::Error),
+    Read(bincode::Error),
     #[error("Could not write to stdout: {0}")]
     Print(#[from] std::io::Error),
 }
@@ -82,7 +82,7 @@ fn scan(
     if let Some(output) = output {
         let start = std::time::Instant::now();
         log::info!("Writing to output file");
-        serde_yaml::to_writer(output.as_ref(), &result).map_err(Error::Write)?;
+        bincode::serialize_into(output.as_ref(), &result).map_err(Error::Write)?;
         log::info!("Finished writing to output file in {:?}", start.elapsed());
     }
 
@@ -110,7 +110,7 @@ fn scan(
 }
 
 fn print(input: &std::fs::File, show_matched: bool) -> Result<(), Error> {
-    let (left, right) = serde_yaml::from_reader(input).map_err(Error::Read)?;
+    let (left, right) = bincode::deserialize_from(input).map_err(Error::Read)?;
 
     write(&left, &right, show_matched, Mode::Left)?;
     write(&right, &left, show_matched, Mode::Right)?;
