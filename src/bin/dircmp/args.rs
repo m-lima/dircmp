@@ -4,6 +4,8 @@ enum Error {
     PathDoesNotExist,
     #[error("Path is not a directory")]
     PathNotDir,
+    #[error("Path is not canonical")]
+    BadPath,
     #[error("Could not create file: {0}")]
     Create(std::io::Error),
     #[error("Could not open file: {0}")]
@@ -89,7 +91,7 @@ fn parse_dir(input: std::ffi::OsString) -> Result<std::path::PathBuf, Error> {
     } else if !path.is_dir() {
         Err(Error::PathNotDir)
     } else {
-        Ok(path)
+        std::fs::canonicalize(path).map_err(|_| Error::BadPath)
     }
 }
 

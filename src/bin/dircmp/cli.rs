@@ -215,7 +215,11 @@ fn write_summary(
                 }
             }
             status @ dircmp::Status::Maybe(indices) => {
-                write!(out, "{path}	{status}", path = entry.path().display())?;
+                write!(
+                    out,
+                    "{path}	{status}",
+                    path = reference.path().join(entry.path()).display()
+                )?;
                 for i in indices {
                     write!(
                         out,
