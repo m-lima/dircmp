@@ -81,8 +81,9 @@ fn scan(
 
     if let Some(output) = output {
         let start = std::time::Instant::now();
+        let writer = std::io::BufWriter::new(output.as_ref());
         log::info!("Writing to output file");
-        bincode::serialize_into(output.as_ref(), &result).map_err(Error::Write)?;
+        bincode::serialize_into(writer, &result).map_err(Error::Write)?;
         log::info!("Finished writing to output file in {:?}", start.elapsed());
     }
 
@@ -90,13 +91,11 @@ fn scan(
 
     if let Some(output) = summary {
         let start = std::time::Instant::now();
-        log::info!("Writing summary to output file");
-        write_summary(output.as_ref(), &left, &right, Mode::Left)?;
-        write_summary(output.as_ref(), &right, &left, Mode::Right)?;
-        log::info!(
-            "Finished writing summary to output file in {:?}",
-            start.elapsed()
-        );
+        let mut writer = std::io::BufWriter::new(output.as_ref());
+        log::info!("Writing summary");
+        write_summary(&mut writer, &left, &right, Mode::Left)?;
+        write_summary(&mut writer, &right, &left, Mode::Right)?;
+        log::info!("Finished writing summary in {:?}", start.elapsed());
     }
 
     match print_filter {
@@ -110,7 +109,13 @@ fn scan(
 }
 
 fn print(input: &std::fs::File, show_matched: bool) -> Result<(), Error> {
-    let (left, right) = bincode::deserialize_from(input).map_err(Error::Read)?;
+    log::debug!("show_matched: {show_matched}");
+
+    let start = std::time::Instant::now();
+    log::info!("Reading from input file");
+    let reader = std::io::BufReader::new(input);
+    let (left, right) = bincode::deserialize_from(reader).map_err(Error::Read)?;
+    log::info!("Finished reading from input file in {:?}", start.elapsed());
 
     write(&left, &right, show_matched, Mode::Left)?;
     write(&right, &left, show_matched, Mode::Right)?;
