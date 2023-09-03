@@ -25,13 +25,6 @@ pub fn crawl(path: &std::path::Path, pool: &rayon::ThreadPool) -> Result<Vec<ent
         accumulate(&receiver, path)
     })?;
 
-    log::info!(
-        "Finished indexing {} items for {} in {:?}",
-        entries.len(),
-        path.display(),
-        start.elapsed(),
-    );
-
     if let Some(first) = entries.first() {
         assert!(
             entries
@@ -44,14 +37,14 @@ pub fn crawl(path: &std::path::Path, pool: &rayon::ThreadPool) -> Result<Vec<ent
                 .all(|a| a),
             "Entries are not sorted"
         );
-
-        log::info!(
-            "Finished indexing {} items for {} in {:?}",
-            entries.len(),
-            path.display(),
-            start.elapsed(),
-        );
     }
+
+    log::info!(
+        "Finished indexing {} items for {} in {:?}",
+        entries.len(),
+        path.display(),
+        start.elapsed(),
+    );
 
     Ok(entries)
 }

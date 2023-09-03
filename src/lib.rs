@@ -29,8 +29,10 @@ pub fn compare(
     let mut left_entries = crawler::crawl(&left, &pool)?;
     let mut right_entries = crawler::crawl(&right, &pool)?;
 
-    first_pass(&mut left_entries, &mut right_entries, &pool);
-    second_pass(&mut left_entries, &mut right_entries, &pool);
+    let empty_hash = entry::Hash::new(md5::Digest::finalize(<md5::Md5 as md5::Digest>::new()));
+
+    first_pass(&mut left_entries, &mut right_entries, &empty_hash, &pool);
+    second_pass(&mut left_entries, &mut right_entries, &empty_hash, &pool);
 
     let left = entry::Directory::new(left, left_entries);
     let right = entry::Directory::new(right, right_entries);
@@ -41,6 +43,7 @@ pub fn compare(
 fn first_pass(
     left: &mut Vec<entry::Entry>,
     right: &mut Vec<entry::Entry>,
+    empty_hash: &entry::Hash,
     pool: &rayon::ThreadPool,
 ) {
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
@@ -58,6 +61,9 @@ fn first_pass(
                     Ok(i) => {
                         entry.status = entry::Status::Same(i);
                         unsafe { (*ptr.add(i)).status = entry::Status::Same(left_idx) };
+                    }
+                    Err(_) if entry.hash() == empty_hash => {
+                        entry.status = entry::Status::Empty;
                     }
                     Err(i) => {
                         let indices = matching_hashes(&entry.hash, i, right);
@@ -85,6 +91,7 @@ fn first_pass(
 fn second_pass(
     left: &mut Vec<entry::Entry>,
     right: &mut Vec<entry::Entry>,
+    empty_hash: &entry::Hash,
     pool: &rayon::ThreadPool,
 ) {
     use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -106,6 +113,9 @@ fn second_pass(
                             "Marking unexpected `SAME` on second pass for {}",
                             entry.path.display()
                         );
+                    }
+                    Err(_) if entry.hash() == empty_hash => {
+                        entry.status = entry::Status::Empty;
                     }
                     Err(i) => {
                         let indices = matching_hashes(&entry.hash, i, left);

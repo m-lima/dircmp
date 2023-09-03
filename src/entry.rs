@@ -156,6 +156,7 @@ pub enum Status {
     Modified(usize),
     Maybe(Vec<usize>),
     Unique,
+    Empty,
 }
 
 impl Status {
@@ -166,6 +167,7 @@ impl Status {
             Status::Modified(_) => 2,
             Status::Maybe(_) => 3,
             Status::Unique => 4,
+            Status::Empty => 5,
         }
     }
 }
@@ -178,6 +180,7 @@ impl std::fmt::Display for Status {
             Status::Modified(_) => f.write_str("MODIFIED"),
             Status::Maybe(_) => f.write_str("MAYBE"),
             Status::Unique => f.write_str("UNIQUE"),
+            Status::Empty => f.write_str("EMPTY"),
         }
     }
 }

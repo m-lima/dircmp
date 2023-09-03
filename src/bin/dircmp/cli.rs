@@ -183,6 +183,9 @@ fn write(
             status @ dircmp::Status::Unique => {
                 writeln!(out, "[31m{mode} {status:<8}[m {}", entry.path().display())?;
             }
+            status @ dircmp::Status::Empty => {
+                writeln!(out, "[36m{mode} {status:<8}[m {}", entry.path().display())?;
+            }
         }
     }
 
@@ -225,7 +228,7 @@ fn write_summary(
                 }
                 writeln!(out)?;
             }
-            status @ dircmp::Status::Unique => {
+            status @ (dircmp::Status::Unique | dircmp::Status::Empty) => {
                 writeln!(
                     out,
                     "{path}	{status}",
