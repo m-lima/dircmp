@@ -3,6 +3,7 @@
 pub fn run() -> std::process::ExitCode {
     druid::AppLauncher::with_window(main_window())
         .configure_env(theme::init)
+        .delegate(event::Delegate)
         .launch(state::State::default())
         .map_or(std::process::ExitCode::FAILURE, |_| {
             std::process::ExitCode::SUCCESS
@@ -13,6 +14,23 @@ fn main_window() -> druid::WindowDesc<state::State> {
     druid::WindowDesc::new(view::root())
         .window_size((800., 600.))
         .title("DirCmp")
+}
+
+mod event {
+    #[derive(Copy, Clone)]
+    pub struct Delegate;
+
+    impl druid::AppDelegate<super::state::State> for Delegate {
+        fn window_removed(
+            &mut self,
+            _id: druid::WindowId,
+            _data: &mut super::state::State,
+            _env: &druid::Env,
+            _ctx: &mut druid::DelegateCtx,
+        ) {
+            druid::Application::global().quit();
+        }
+    }
 }
 
 mod view {
@@ -47,7 +65,7 @@ mod theme {
 
         env.set(druid::theme::UI_FONT, main_font.clone());
         env.set(font::BOLD, main_font.with_weight(druid::FontWeight::BOLD));
-        color::light(env, data);
+        // color::light(env, data);
     }
 
     pub mod font {
