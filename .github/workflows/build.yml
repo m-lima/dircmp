@@ -45,8 +45,23 @@ jobs:
         uses: anthepro/install-qt-static@v1
         with:
           version: ${{ env.qt-version }}
-          configure-args: -opensource -nomake tools -nomake examples -nomake tests -nomake benchmarks -nomake manual-tests
-          submodules: default
+          configure-args: >-
+            -opensource
+            -nomake tools
+            -nomake examples
+            -nomake tests
+            -nomake benchmarks
+            -nomake manual-tests
+            -opengl desktop
+            -zlib qt
+            -freetype qt
+            -harfbuzz qt
+            -libpng qt
+            -libjpeg qt
+            -sqlite qt
+            -pcre qt
+            -ltcg
+          submodules: essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
           dir: ${{ env.qt-dir }}
 
       - name: Format
