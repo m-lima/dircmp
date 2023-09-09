@@ -16,19 +16,19 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Prepare env
+        env:
+          BLOINK: blokiner
         run: |
-          echo 'QT_DIR_PATH="${{ runner.temp }}/qt"'
-          echo 'QMAKE="${QT_DIR_PATH}/bin/qmake"'
-          echo 'QT_INCLUDE_PATH="${QT_DIR_PATH}/include"'
-          echo 'QT_LIBRARY_PATH="${QT_DIR_PATH}/lib"'
-          echo 'QT_QPA_PLATFORM_PLUGIN_PATH="${QT_DIR_PATH}/share/qt/plugins/platforms"'
-          echo 'QML2_IMPORT_PATH="${QT_DIR_PATH}/share/qt/qml"'
+          echo 'QT_DIR_PATH="${{ runner.temp }}/qt"' >> "${{ github.env }}"
+          echo 'QMAKE="${QT_DIR_PATH}/bin/qmake"' >> "${{ github.env }}"
+          echo 'QT_INCLUDE_PATH="${QT_DIR_PATH}/include"' >> "${{ github.env }}"
+          echo 'QT_LIBRARY_PATH="${QT_DIR_PATH}/lib"' >> "${{ github.env }}"
+          echo 'QT_QPA_PLATFORM_PLUGIN_PATH="${QT_DIR_PATH}/share/qt/plugins/platforms"' >> "${{ github.env }}"
+          echo 'QML2_IMPORT_PATH="${QT_DIR_PATH}/share/qt/qml"' >> "${{ github.env }}"
 
       - name: Prepare Cargo
         id: prepare-cargo
         uses: dtolnay/rust-toolchain@stable
-        env:
-          BLOINK: blokiner
         with:
           components: clippy, rustfmt
 
