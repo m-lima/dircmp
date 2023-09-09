@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      qt-dir: ~/qt
       qt-version: 6.5.1
-      qt-builder: ~/build_qt.sh
+      qt-dir-stub: qt
+      qt-builder-stub: build_qt.sh
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -35,6 +35,8 @@ jobs:
             target
 
       - name: Prepare QT
+        env:
+          qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         run: |
           cat > ${{ env.qt-builder }} <<EOF
           set -e
@@ -80,7 +82,7 @@ jobs:
           mkdir build
           cd build
           ../configure \
-            -prefix ${{ env.qt-dir }} \
+            -prefix \${PREFIX} \
             -release \
             -static \
             -static-runtime \
@@ -109,16 +111,21 @@ jobs:
       - name: Cache QT
         id: cache-qt
         uses: actions/cache@v3
+        env:
+          qt-dir: ${{ runner.temp }}/${{ env.qt-dir-stub }}
+          qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         with:
           path: ${{ env.qt-dir }}
           key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ hashFiles(env.qt-builder) }}
 
       # - name: Compile QT
       #   if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
+      #   env:
+      #     PREFIX: ${{ runner.temp }}/${{ env.qt-dir-stub }}
       #   working-directory: ${{ runner.temp }}
       #   run: |
       #     mkdir ${{ env.qt-dir }}
-      #     # ${{ env.qt-builder }}
+      #     # ./${{ env.qt-builder }}
       #   # uses: anthepro/install-qt-static@v1
       #   # with:
       #   #   version: ${{ env.qt-version }}
