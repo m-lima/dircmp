@@ -45,8 +45,8 @@ jobs:
         uses: anthepro/install-qt-static@v1
         with:
           version: ${{ env.qt-version }}
-          # configure-args: -opensource -opengl desktop
-          # submodules: qtbase,qtshadertools,qtdeclarative
+          configure-args: -opensource -nomake tools -nomake examples -nomake tests -nomake benchmarks -nomake manual-tests
+          submodules: default
           dir: ${{ env.qt-dir }}
 
       - name: Format
