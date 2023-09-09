@@ -32,7 +32,6 @@ jobs:
         env:
           qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         run: |
-          echo ${{ hashFiles(env.qt-builder) }}
           cat > ${{ env.qt-builder }} <<EOF
           set -e
           sudo apt update
@@ -102,6 +101,7 @@ jobs:
           cmake --install .
           EOF
           chmod +x ${{ env.qt-builder }}
+          echo ${{ hashFiles(env.qt-builder) }}
 
       - name: Cache QT
         id: cache-qt
