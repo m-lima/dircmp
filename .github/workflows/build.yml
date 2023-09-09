@@ -26,18 +26,13 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache Cargo
-        id: cache-cargo
-        uses: actions/cache@v3
-        with:
-          key: ${{ runner.os }}-cargo-${{ steps.prepare-cargo.outputs.cachekey }}-${{ hashFiles('Cargo.lock') }}
-          path: |
-            ~/.cargo
-            target
+        uses: Swatinem/rust-cache@v2
 
       - name: Prepare QT
         env:
           qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         run: |
+          echo ${{ hashFiles(env.qt-builder) }}
           cat > ${{ env.qt-builder }} <<EOF
           set -e
           sudo apt update
@@ -116,7 +111,7 @@ jobs:
           qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         with:
           path: ${{ env.qt-dir }}
-          key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ hashFiles(env.qt-builder) }}
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.qt-builder) }}
 
       # - name: Compile QT
       #   if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
