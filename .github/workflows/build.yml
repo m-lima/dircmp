@@ -14,7 +14,7 @@ jobs:
     env:
       qt-version: 6.5.1
       qt-dir-stub: qt
-      qt-builder-stub: build_qt.sh
+      qt-builder: build_qt.sh
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -29,8 +29,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Prepare QT
-        env:
-          qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         run: |
           cat > ${{ env.qt-builder }} <<EOF
           set -e
@@ -101,14 +99,13 @@ jobs:
           cmake --install .
           EOF
           chmod +x ${{ env.qt-builder }}
-          echo ${{ hashFiles(env.qt-builder) }}
+          echo ${{ hashFiles('env.qt-builder') }}
 
       - name: Cache QT
         id: cache-qt
         uses: actions/cache@v3
         env:
           qt-dir: ${{ runner.temp }}/${{ env.qt-dir-stub }}
-          qt-builder: ${{ runner.temp }}/${{ env.qt-builder-stub }}
         with:
           path: ${{ env.qt-dir }}
           key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.qt-builder) }}
