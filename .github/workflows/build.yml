@@ -22,6 +22,7 @@ jobs:
           echo QT_SRC_PATH=${{ runner.temp }}/qt_src >> "${{ github.env }}"
 
       - name: Cache QT
+        id: cache-qt
         uses: actions/cache@v3
         with:
           path: ${{ env.QT_DIR_PATH }}
