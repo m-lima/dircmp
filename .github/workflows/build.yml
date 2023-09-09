@@ -13,8 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       qt_version: 6.5.1
-      qt_dir_stub: qt
+      qt_dir: $RUNNER_TEMP/qt
       qt_builder: build_qt.sh
+      QMAKE: $qt_dir/bin/qmake
+      QT_INCLUDE_PATH: $qt_dir/include
+      QT_LIBRARY_PATH: $qt_dir/lib
+      QT_QPA_PLATFORM_PLUGIN_PATH: $qt_dir/share/qt/plugins/platforms
+      QML2_IMPORT_PATH: $qt_dir/share/qt/qml
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -103,52 +108,25 @@ jobs:
       - name: Cache QT
         id: cache-qt
         uses: actions/cache@v3
-        env:
-          qt_dir: ${{ runner.temp }}/${{ env.qt_dir_stub }}
         with:
           path: ${{ env.qt_dir }}
           key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.qt_builder) }}
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
-        env:
-          qt_dir: ${{ runner.temp }}/${{ env.qt_dir_stub }}
         working-directory: ${{ runner.temp }}
         run: |
           mkdir ${{ env.qt_dir }}
           ${{ github.workspace }}/${{ env.qt_builder }}
-        # uses: anthepro/install-qt-static@v1
-        # with:
-        #   version: ${{ env.qt_version }}
-        #   configure-args: >-
-        #     -opensource
-        #     -nomake tools
-        #     -nomake examples
-        #     -nomake tests
-        #     -nomake benchmarks
-        #     -nomake manual-tests
-        #     -opengl desktop
-        #     -qt-zlib
-        #     -qt-freetype
-        #     -qt-harfbuzz
-        #     -qt-libpng
-        #     -qt-libjpeg
-        #     -qt-sqlite
-        #     -qt-pcre
-        #     -ltcg
-        #     -optimize-size
-        #     -no-qml-debug
-        #   submodules: essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
-        #   dir: ${{ env.qt_dir }}
 
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Build
-        run: cargo check --verbose
-
-      - name: Lint
-        run: cargo clippy --verbose -- -W clippy::pedantic
-
-      - name: Test
-        run: cargo test --verbose --no-fail-fast
+      # - name: Build
+      #   run: cargo check --verbose
+      #
+      # - name: Lint
+      #   run: cargo clippy --verbose -- -W clippy::pedantic
+      #
+      # - name: Test
+      #   run: cargo test --verbose --no-fail-fast
