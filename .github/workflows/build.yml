@@ -19,7 +19,7 @@ jobs:
       - name: Prepare env
         run: |
           echo QT_DIR_PATH=${{ runner.temp }}/qt >> "${{ github.env }}"
-          echo QT_DIR_SRC=${{ runner.temp }}/qt_src >> "${{ github.env }}"
+          echo QT_SRC_PATH=${{ runner.temp }}/qt_src >> "${{ github.env }}"
 
       - name: Cache QT
         uses: actions/cache@v3
