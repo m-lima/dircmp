@@ -74,7 +74,7 @@ jobs:
           mkdir build
           cd build
           ../configure \
-            -prefix \${PREFIX} \
+            -prefix \${qt-dir} \
             -release \
             -static \
             -static-runtime \
@@ -112,7 +112,7 @@ jobs:
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
         env:
-          PREFIX: ${{ runner.temp }}/${{ env.qt-dir-stub }}
+          qt-dir: ${{ runner.temp }}/${{ env.qt-dir-stub }}
         working-directory: ${{ runner.temp }}
         run: |
           mkdir ${{ env.qt-dir }}
