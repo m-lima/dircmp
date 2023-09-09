@@ -44,11 +44,11 @@ RUN \
 RUN \
   cd /qt_src && \
   git checkout v6.5.1 && \
-  ./init-repository --module-subset=essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools && \
+  ./init-repository --module-subset=essential,qtsvg,qtimageformats,qtcharts,qtshadertools && \
   mkdir build && \
   cd build && \
   ../configure \
-    -prefix ${{ env.qt-sir }} \
+    -prefix /qt \
     -release \
     -static \
     -static-runtime \
@@ -67,5 +67,6 @@ RUN \
     -qt-sqlite \
     -qt-pcre \
     -ltcg \
+    -no-pch \
     -optimize-size \
     -no-qml-debug
