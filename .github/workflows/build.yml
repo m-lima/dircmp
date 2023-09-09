@@ -28,8 +28,8 @@ jobs:
         id: cache-cargo
         uses: actions/cache@v3
         with:
-          path: |
           key: ${{ runner.os }}-cargo-${{ steps.prepare-cargo.outputs.cachekey }}-${{ hashFiles('Cargo.lock') }}
+          path: |
             ~/.cargo
             target
 
@@ -38,7 +38,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ env.qt-dir }}
-          key: ${{ runner.os }}-qt-${{ env.qt-version }}
+          key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ env.qt-version }}
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
