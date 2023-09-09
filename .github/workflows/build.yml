@@ -7,22 +7,28 @@ on:
 
 env:
   RUSTFLAGS: "-Dwarnings"
+  TEMP_DIR: ${{ github.workspace }}/__temp__
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      qt_version: 6.5.1
-      qt_dir: $RUNNER_TEMP/qt
-      qt_builder: build_qt.sh
-      QMAKE: $qt_dir/bin/qmake
-      QT_INCLUDE_PATH: $qt_dir/include
-      QT_LIBRARY_PATH: $qt_dir/lib
-      QT_QPA_PLATFORM_PLUGIN_PATH: $qt_dir/share/qt/plugins/platforms
-      QML2_IMPORT_PATH: $qt_dir/share/qt/qml
+      QT_VERSION: 6.5.1
+      QT_BUILDER: ${{ env.TEMP_DIR }}/build_qt.sh
+      QT_SRC: ${{ env.TEMP_DIR }}/qt_src
+      QT_DIR: ${{ env.TEMP_DIR }}/qt
+      QMAKE: ${{ env.TEMP_DIR }}/qt/bin/qmake
+      QT_INCLUDE_PATH: ${{ env.TEMP_DIR }}/qt/include
+      QT_LIBRARY_PATH: ${{ env.TEMP_DIR }}/qt/lib
+      QT_QPA_PLATFORM_PLUGIN_PATH: ${{ env.TEMP_DIR }}/qt/share/qt/plugins/platforms
+      QML2_IMPORT_PATH: ${{ env.TEMP_DIR }}/qt/share/qt/qml
     steps:
       - name: Checkout
         uses: actions/checkout@v1
+
+      - name: Prepare temp dir
+        run: |
+          mkdir ${{ env.TEMP_DIR }}
 
       - name: Prepare Cargo
         id: prepare-cargo
@@ -35,8 +41,9 @@ jobs:
 
       - name: Prepare QT
         run: |
-          cat > ${{ env.qt_builder }} <<EOF
+          cat > ${{ env.QT_BUILDER }} <<EOF
           set -e
+
           sudo apt update
           sudo apt -y install \
             git \
@@ -72,14 +79,14 @@ jobs:
             cmake \
             ninja-build \
             clang
-          git clone https://code.qt.io/qt/qt5.git qt
-          cd qt
-          git checkout v${{ env.qt_version }}
+          git clone https://code.qt.io/qt/qt5.git \${QT_SRC}
+          cd \${QT_SRC}
+          git checkout v${{ env.QT_VERSION }}
           perl ./init-repository --module-subset=essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
           mkdir build
           cd build
           ../configure \
-            -prefix \${qt_dir} \
+            -prefix \${QT_DIR} \
             -release \
             -static \
             -static-runtime \
@@ -103,30 +110,52 @@ jobs:
           cmake --build . --parallel 2
           cmake --install .
           EOF
-          chmod +x ${{ env.qt_builder }}
+          chmod +x ${{ env.QT_BUILDER }}
 
       - name: Cache QT
         id: cache-qt
         uses: actions/cache@v3
         with:
-          path: ${{ env.qt_dir }}
-          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.qt_builder) }}
+          path: ${{ env.QT_DIR }}
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.QT_BUILDER) }}
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
-        working-directory: ${{ runner.temp }}
         run: |
-          mkdir ${{ env.qt_dir }}
-          ${{ github.workspace }}/${{ env.qt_builder }}
+          mkdir ${{ env.QT_DIR }}
+          ${{ env.QT_BUILDER }}
+        # uses: anthepro/install-qt-static@v1
+        # with:
+        #   version: ${{ env.QT_VERSION }}
+        #   configure-args: >-
+        #     -opensource
+        #     -nomake tools
+        #     -nomake examples
+        #     -nomake tests
+        #     -nomake benchmarks
+        #     -nomake manual-tests
+        #     -opengl desktop
+        #     -qt-zlib
+        #     -qt-freetype
+        #     -qt-harfbuzz
+        #     -qt-libpng
+        #     -qt-libjpeg
+        #     -qt-sqlite
+        #     -qt-pcre
+        #     -ltcg
+        #     -optimize-size
+        #     -no-qml-debug
+        #   submodules: essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
+        #   dir: ${{ env.QT_DIR }}
 
       - name: Format
         run: cargo fmt --all -- --check
 
-      # - name: Build
-      #   run: cargo check --verbose
-      #
-      # - name: Lint
-      #   run: cargo clippy --verbose -- -W clippy::pedantic
-      #
-      # - name: Test
-      #   run: cargo test --verbose --no-fail-fast
+      - name: Build
+        run: cargo check --verbose
+
+      - name: Lint
+        run: cargo clippy --verbose -- -W clippy::pedantic
+
+      - name: Test
+        run: cargo test --verbose --no-fail-fast
