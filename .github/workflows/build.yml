@@ -109,11 +109,10 @@ jobs:
 
       - name: Cache QT
         id: cache-qt
-        working-directory: ${{ runner.temp }}
         uses: actions/cache@v3
         with:
           path: ${{ env.qt-dir }}
-          key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ hashFiles(build_qt.sh) }}
+          key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ hashFiles(format('{0}/{1}', runner.temp, 'build_qt.sh')) }}
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
