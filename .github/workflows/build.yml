@@ -7,21 +7,13 @@ on:
 
 env:
   RUSTFLAGS: "-Dwarnings"
-  TEMP_DIR: ${{ github.workspace }}/__temp__
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      QT_VERSION: 6.5.1
-      QT_BUILDER: ${{ env.TEMP_DIR }}/build_qt.sh
-      QT_SRC: ${{ env.TEMP_DIR }}/qt_src
-      QT_DIR: ${{ env.TEMP_DIR }}/qt
-      QMAKE: ${{ env.TEMP_DIR }}/qt/bin/qmake
-      QT_INCLUDE_PATH: ${{ env.TEMP_DIR }}/qt/include
-      QT_LIBRARY_PATH: ${{ env.TEMP_DIR }}/qt/lib
-      QT_QPA_PLATFORM_PLUGIN_PATH: ${{ env.TEMP_DIR }}/qt/share/qt/plugins/platforms
-      QML2_IMPORT_PATH: ${{ env.TEMP_DIR }}/qt/share/qt/qml
+      QT_SRC_PATH: ${{ runner.temp }}/qt_src
+      QT_DIR_PATH: ${{ runner.temp }}/qt
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -39,123 +31,38 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Prepare QT
-        run: |
-          cat > ${{ env.QT_BUILDER }} <<EOF
-          set -e
-
-          sudo apt update
-          sudo apt -y install \
-            git \
-            libclang-dev \
-            libgl1-mesa-dev \
-            libfontconfig1-dev \
-            libfreetype6-dev \
-            libx11-dev \
-            libx11-xcb-dev \
-            libxext-dev \
-            libxfixes-dev \
-            libxi-dev \
-            libxrender-dev \
-            libxcb1-dev \
-            libxcb-glx0-dev \
-            libxcb-keysyms1-dev \
-            libxcb-image0-dev \
-            libxcb-shm0-dev \
-            libxcb-icccm4-dev \
-            libxcb-sync-dev \
-            libxcb-xfixes0-dev \
-            libxcb-shape0-dev \
-            libxcb-randr0-dev \
-            libxcb-render-util0-dev \
-            libxcb-util-dev \
-            libxcb-xinerama0-dev \
-            libxcb-xkb-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            libatspi2.0-dev \
-            dbus-x11 \
-            libpcre2-dev \
-            cmake \
-            ninja-build \
-            clang
-          git clone https://code.qt.io/qt/qt5.git \${QT_SRC}
-          cd \${QT_SRC}
-          git checkout v${{ env.QT_VERSION }}
-          perl ./init-repository --module-subset=essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
-          mkdir build
-          cd build
-          ../configure \
-            -prefix \${QT_DIR} \
-            -release \
-            -static \
-            -static-runtime \
-            -opensource \
-            -nomake tools \
-            -nomake examples \
-            -nomake tests \
-            -nomake benchmarks \
-            -nomake manual-tests \
-            -opengl desktop \
-            -qt-zlib \
-            -qt-freetype \
-            -qt-harfbuzz \
-            -qt-libpng \
-            -qt-libjpeg \
-            -qt-sqlite \
-            -qt-pcre \
-            -ltcg \
-            -optimize-size \
-            -no-qml-debug
-          cmake --build . --parallel 2
-          cmake --install .
-          EOF
-          chmod +x ${{ env.QT_BUILDER }}
-
       - name: Cache QT
         id: cache-qt
         uses: actions/cache@v3
         with:
-          path: ${{ env.QT_DIR }}
-          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.QT_BUILDER) }}
+          path: ${{ env.QT_DIR_PATH }}
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('./.github/workflows/build_qt.sh') }}
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
         run: |
-          mkdir ${{ env.QT_DIR }}
-          ${{ env.QT_BUILDER }}
-        # uses: anthepro/install-qt-static@v1
-        # with:
-        #   version: ${{ env.QT_VERSION }}
-        #   configure-args: >-
-        #     -opensource
-        #     -nomake tools
-        #     -nomake examples
-        #     -nomake tests
-        #     -nomake benchmarks
-        #     -nomake manual-tests
-        #     -opengl desktop
-        #     -qt-zlib
-        #     -qt-freetype
-        #     -qt-harfbuzz
-        #     -qt-libpng
-        #     -qt-libjpeg
-        #     -qt-sqlite
-        #     -qt-pcre
-        #     -ltcg
-        #     -optimize-size
-        #     -no-qml-debug
-        #   submodules: essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
-        #   dir: ${{ env.QT_DIR }}
+          ./.github/workflows/build_qt.sh
 
       - name: Format
         run: cargo fmt --all -- --check
 
       - name: Build
+        env:
+          QMAKE: ${{ env.QT_DIR_PATH }}/bin/qmake
+          QT_INCLUDE_PATH: ${{ env.QT_DIR_PATH }}/include
+          QT_LIBRARY_PATH: ${{ env.QT_DIR_PATH }}/lib
+          QT_QPA_PLATFORM_PLUGIN_PATH: ${{ env.QT_DIR_PATH }}/share/qt/plugins/platforms
+          QML2_IMPORT_PATH: ${{ env.QT_DIR_PATH }}/share/qt/qml
         run: cargo check --verbose
 
       - name: Lint
         run: cargo clippy --verbose -- -W clippy::pedantic
 
       - name: Test
+        env:
+          QMAKE: ${{ env.QT_DIR_PATH }}/bin/qmake
+          QT_INCLUDE_PATH: ${{ env.QT_DIR_PATH }}/include
+          QT_LIBRARY_PATH: ${{ env.QT_DIR_PATH }}/lib
+          QT_QPA_PLATFORM_PLUGIN_PATH: ${{ env.QT_DIR_PATH }}/share/qt/plugins/platforms
+          QML2_IMPORT_PATH: ${{ env.QT_DIR_PATH }}/share/qt/qml
         run: cargo test --verbose --no-fail-fast
