@@ -33,17 +33,11 @@ jobs:
             ~/.cargo
             target
 
-      - name: Cache QT
-        id: cache-qt
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.qt-dir }}
-          key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ env.qt-version }}
-
-      - name: Compile QT
-        if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
+      - name: Prepare QT
         working-directory: ${{ runner.temp }}
         run: |
+          cat > build_qt.sh <<EOF
+          set -e
           sudo apt update
           sudo apt -y install \
             git \
@@ -87,7 +81,7 @@ jobs:
           mkdir build
           cd build
           ../configure \
-            -prefix ${{ env.qt-sir }} \
+            -prefix ${{ env.qt-dir }} \
             -release \
             -static \
             -static-runtime \
@@ -110,6 +104,21 @@ jobs:
             -no-qml-debug
           cmake --build . --parallel 2
           cmake --install .
+          EOF
+          chmod +x build_qt.sh
+
+      - name: Cache QT
+        id: cache-qt
+        working-directory: ${{ runner.temp }}
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.qt-dir }}
+          key: ${{ runner.os }}-${{ runner.arch }}-qt-${{ hashFiles(build_qt.sh) }}
+
+      - name: Compile QT
+        if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
+        working-directory: ${{ runner.temp }}
+        run: ./build_qt.sh
         # uses: anthepro/install-qt-static@v1
         # with:
         #   version: ${{ env.qt-version }}
