@@ -17,14 +17,14 @@ jobs:
 
       - name: Prepare env
         env:
-          BLOINK: blokiner
+          QT_DIR_PATH: ${{ runner.temp }}/qt
         run: |
-          echo 'QT_DIR_PATH="${{ runner.temp }}/qt"' >> "${{ github.env }}"
-          echo 'QMAKE="${QT_DIR_PATH}/bin/qmake"' >> "${{ github.env }}"
-          echo 'QT_INCLUDE_PATH="${QT_DIR_PATH}/include"' >> "${{ github.env }}"
-          echo 'QT_LIBRARY_PATH="${QT_DIR_PATH}/lib"' >> "${{ github.env }}"
-          echo 'QT_QPA_PLATFORM_PLUGIN_PATH="${QT_DIR_PATH}/share/qt/plugins/platforms"' >> "${{ github.env }}"
-          echo 'QML2_IMPORT_PATH="${QT_DIR_PATH}/share/qt/qml"' >> "${{ github.env }}"
+          echo "QT_DIR_PATH=\"${QT_DIR_PATH}\"" >> "${{ github.env }}"
+          echo "QMAKE=\"${QT_DIR_PATH}/bin/qmake\"" >> "${{ github.env }}"
+          echo "QT_INCLUDE_PATH=\"${QT_DIR_PATH}/include\"" >> "${{ github.env }}"
+          echo "QT_LIBRARY_PATH=\"${QT_DIR_PATH}/lib\"" >> "${{ github.env }}"
+          echo "QT_QPA_PLATFORM_PLUGIN_PATH=\"${QT_DIR_PATH}/share/qt/plugins/platforms\"" >> "${{ github.env }}"
+          echo "QML2_IMPORT_PATH=\"${QT_DIR_PATH}/share/qt/qml\"" >> "${{ github.env }}"
 
       - name: Prepare Cargo
         id: prepare-cargo
