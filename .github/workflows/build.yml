@@ -11,20 +11,24 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      QT_SRC_PATH: ${{ runner.temp }}/qt_src
-      QT_DIR_PATH: ${{ runner.temp }}/qt
     steps:
       - name: Checkout
         uses: actions/checkout@v1
 
-      - name: Prepare temp dir
+      - name: Prepare env
         run: |
-          mkdir ${{ env.TEMP_DIR }}
+          echo 'QT_DIR_PATH="${{ runner.temp }}/qt"'
+          echo 'QMAKE="${QT_DIR_PATH}/bin/qmake"'
+          echo 'QT_INCLUDE_PATH="${QT_DIR_PATH}/include"'
+          echo 'QT_LIBRARY_PATH="${QT_DIR_PATH}/lib"'
+          echo 'QT_QPA_PLATFORM_PLUGIN_PATH="${QT_DIR_PATH}/share/qt/plugins/platforms"'
+          echo 'QML2_IMPORT_PATH="${QT_DIR_PATH}/share/qt/qml"'
 
       - name: Prepare Cargo
         id: prepare-cargo
         uses: dtolnay/rust-toolchain@stable
+        env:
+          BLOINK: blokiner
         with:
           components: clippy, rustfmt
 
@@ -40,29 +44,18 @@ jobs:
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
-        run: |
-          ./.github/workflows/build_qt.sh
+        env:
+          QT_SRC_PATH: ${{ runner.temp }}/qt_src
+        run: ${{ github.workspace }}/.github/workflows/build_qt.sh
 
       - name: Format
         run: cargo fmt --all -- --check
 
       - name: Build
-        env:
-          QMAKE: ${{ env.QT_DIR_PATH }}/bin/qmake
-          QT_INCLUDE_PATH: ${{ env.QT_DIR_PATH }}/include
-          QT_LIBRARY_PATH: ${{ env.QT_DIR_PATH }}/lib
-          QT_QPA_PLATFORM_PLUGIN_PATH: ${{ env.QT_DIR_PATH }}/share/qt/plugins/platforms
-          QML2_IMPORT_PATH: ${{ env.QT_DIR_PATH }}/share/qt/qml
         run: cargo check --verbose
 
       - name: Lint
         run: cargo clippy --verbose -- -W clippy::pedantic
 
       - name: Test
-        env:
-          QMAKE: ${{ env.QT_DIR_PATH }}/bin/qmake
-          QT_INCLUDE_PATH: ${{ env.QT_DIR_PATH }}/include
-          QT_LIBRARY_PATH: ${{ env.QT_DIR_PATH }}/lib
-          QT_QPA_PLATFORM_PLUGIN_PATH: ${{ env.QT_DIR_PATH }}/share/qt/plugins/platforms
-          QML2_IMPORT_PATH: ${{ env.QT_DIR_PATH }}/share/qt/qml
         run: cargo test --verbose --no-fail-fast

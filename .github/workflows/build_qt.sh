@@ -40,13 +40,14 @@ sudo apt -y install \
   ninja-build \
   clang
 
+mkdir -p ${QT_DIR_PATH}
+
 git clone https://code.qt.io/qt/qt5.git ${QT_SRC_PATH}
 cd ${QT_SRC_PATH}
 git checkout v${QT_VERSION}
 
 perl ./init-repository --module-subset=essential,qtsvg,qtimageformats,qtcharts,qtshadertools
 
-mkdir ${QT_DIR_PATH}
 mkdir build
 cd build
 ../configure \
