@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      qt-version: 6.5.1
-      qt-dir-stub: qt
-      qt-builder: build_qt.sh
+      qt_version: 6.5.1
+      qt_dir_stub: qt
+      qt_builder: build_qt.sh
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -30,7 +30,7 @@ jobs:
 
       - name: Prepare QT
         run: |
-          cat > ${{ env.qt-builder }} <<EOF
+          cat > ${{ env.qt_builder }} <<EOF
           set -e
           sudo apt update
           sudo apt -y install \
@@ -69,12 +69,12 @@ jobs:
             clang
           git clone https://code.qt.io/qt/qt5.git qt
           cd qt
-          git checkout v6.5.1
+          git checkout v${{ env.qt_version }}
           perl ./init-repository --module-subset=essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
           mkdir build
           cd build
           ../configure \
-            -prefix \${qt-dir} \
+            -prefix \${qt_dir} \
             -release \
             -static \
             -static-runtime \
@@ -98,28 +98,28 @@ jobs:
           cmake --build . --parallel 2
           cmake --install .
           EOF
-          chmod +x ${{ env.qt-builder }}
+          chmod +x ${{ env.qt_builder }}
 
       - name: Cache QT
         id: cache-qt
         uses: actions/cache@v3
         env:
-          qt-dir: ${{ runner.temp }}/${{ env.qt-dir-stub }}
+          qt_dir: ${{ runner.temp }}/${{ env.qt_dir_stub }}
         with:
-          path: ${{ env.qt-dir }}
-          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.qt-builder) }}
+          path: ${{ env.qt_dir }}
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(env.qt_builder) }}
 
       - name: Compile QT
         if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
         env:
-          qt-dir: ${{ runner.temp }}/${{ env.qt-dir-stub }}
+          qt_dir: ${{ runner.temp }}/${{ env.qt_dir_stub }}
         working-directory: ${{ runner.temp }}
         run: |
-          mkdir ${{ env.qt-dir }}
-          ${{ github.workspace }}/${{ env.qt-builder }}
+          mkdir ${{ env.qt_dir }}
+          ${{ github.workspace }}/${{ env.qt_builder }}
         # uses: anthepro/install-qt-static@v1
         # with:
-        #   version: ${{ env.qt-version }}
+        #   version: ${{ env.qt_version }}
         #   configure-args: >-
         #     -opensource
         #     -nomake tools
@@ -139,7 +139,7 @@ jobs:
         #     -optimize-size
         #     -no-qml-debug
         #   submodules: essential,qtsvg,qtimageformats,qtcharts,qtquick3d,qtshadertools
-        #   dir: ${{ env.qt-dir }}
+        #   dir: ${{ env.qt_dir }}
 
       - name: Format
         run: cargo fmt --all -- --check
