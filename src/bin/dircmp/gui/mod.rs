@@ -7,6 +7,7 @@ qmetaobject::qrc!(qml, "qml" as "/" {
     "Navigation.qml",
     "navigation/Button.qml",
     "DirectoryInput.qml",
+    "SlidingContainer.qml",
 });
 
 qmetaobject::qrc!(img, "res/img" as "/img" {

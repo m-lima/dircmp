@@ -1,0 +1,62 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - qml
+
+env:
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      qt-dir: ~/qt
+      qt-version: 6.5.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Prepare Cargo
+        id: prepare-cargo
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        id: cache-cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+          key: ${{ runner.os }}-cargo-${{ steps.prepare-cargo.outputs.cachekey }}-${{ hashFiles('Cargo.lock') }}
+            ~/.cargo
+            target
+
+      - name: Cache QT
+        id: cache-qt
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.qt-dir }}
+          key: ${{ runner.os }}-qt-${{ env.qt-version }}
+
+      - name: Compile QT
+        if: ${{ steps.cache-qt.outputs.cache-hit != 'true' }}
+        uses: anthepro/install-qt-static@v1
+        with:
+          version: ${{ env.qt-version }}
+          # configure-args: -opensource -opengl desktop
+          # submodules: qtbase,qtshadertools,qtdeclarative
+          dir: ${{ env.qt-dir }}
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cargo check --verbose
+
+      - name: Lint
+        run: cargo clippy --verbose -- -W clippy::pedantic
+
+      - name: Test
+        run: cargo test --verbose --no-fail-fast
