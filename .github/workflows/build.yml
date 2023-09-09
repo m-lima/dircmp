@@ -14,7 +14,7 @@ jobs:
     env:
       qt-dir: ~/qt
       qt-version: 6.5.1
-      qt-builder: ${{ runner.temp }}/build_qt.sh
+      qt-builder: ${{ env.RUNNER_TEMP }}/build_qt.sh
     steps:
       - name: Checkout
         uses: actions/checkout@v1
