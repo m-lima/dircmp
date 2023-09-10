@@ -70,11 +70,11 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Build
-        run: cargo check --verbose --features static
+      - name: Check
+        run: cargo check --verbose
 
       - name: Lint
-        run: cargo clippy --verbose --features static -- -W clippy::pedantic
+        run: cargo clippy --verbose -- -W clippy::pedantic
 
       - name: Test
         run: cargo test --verbose --no-fail-fast --fetaures static

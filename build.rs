@@ -33,9 +33,10 @@ mod qt {
             println!("cargo:rustc-link-search={search}");
         }
 
+        println!("cargo:rustc-link-lib=GL");
         for lib in libs {
-            let Some(lib) = lib.to_str() else {
-                panic!("Could not convert `{}` to string", lib.display());
+            let Some(lib) = lib.file_stem().and_then(std::ffi::OsStr::to_str).and_then(|l| l.strip_prefix("lib")) else {
+                panic!("Could not get file name for `{}`", lib.display());
             };
             println!("cargo:rustc-link-lib={lib}");
         }
