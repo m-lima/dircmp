@@ -43,7 +43,13 @@ jobs:
     - name: Prepare Cargo
       uses: dtolnay/rust-toolchain@stable
     - name: Build
-      run: cargo build --release --verbose
+      run: >-
+        cargo build
+          --release
+          --verbose
+          --config 'profile.release.code-gen-units=1'
+          --config 'profile.release.lto=true'
+          --config 'profile.release.strip=true'
     - name: Upload asset (UNIX)
       if: matrix.os != 'windows-latest'
       uses: actions/upload-artifact@v3
