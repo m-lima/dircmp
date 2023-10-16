@@ -26,14 +26,15 @@ struct App {
 pub enum Command {
     Scan(Scan),
     Print(Print),
+    Copy(Copy),
 }
 
 impl Command {
     pub fn verbosity(&self) -> log::LevelFilter {
         match self {
-            Command::Scan(Scan { verbosity, .. }) | Command::Print(Print { verbosity, .. }) => {
-                to_verbosity(*verbosity)
-            }
+            Command::Scan(Scan { verbosity, .. })
+            | Command::Print(Print { verbosity, .. })
+            | Command::Copy(Copy { verbosity, .. }) => to_verbosity(*verbosity),
         }
     }
 }
@@ -74,6 +75,22 @@ pub struct Print {
     /// Path to write the TSV summary to
     #[arg(short, long, value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), to_write_file))]
     pub summary: Option<std::sync::Arc<std::fs::File>>,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct Copy {
+    /// Verbosity level
+    #[arg(short, global = true, action = clap::ArgAction::Count)]
+    pub verbosity: u8,
+    /// Path to the `left` directory to compare
+    #[arg(short, long, value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), parse_dir))]
+    pub reference: std::path::PathBuf,
+    /// Path to the `right` directory to compare
+    #[arg(short, long, value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), parse_dir))]
+    pub derived: std::path::PathBuf,
+    /// Path to the `right` directory to compare
+    #[arg(short, long, value_parser = clap::builder::TypedValueParser::try_map(clap::builder::OsStringValueParser::new(), parse_dir))]
+    pub target: std::path::PathBuf,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, clap::ValueEnum)]

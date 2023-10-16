@@ -1,3 +1,4 @@
+mod copy;
 mod io;
 
 use super::args;
@@ -8,6 +9,8 @@ pub enum Error {
     Dircmp(#[from] dircmp::Error),
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    Copy(#[from] copy::Error),
 }
 
 pub fn run(args: args::Command) -> std::process::ExitCode {
@@ -17,19 +20,13 @@ pub fn run(args: args::Command) -> std::process::ExitCode {
     }
 
     let start = std::time::Instant::now();
-    match args {
-        args::Command::Scan(args) => {
-            if let Err(e) = scan(args) {
-                log::error!("{e}");
-                return std::process::ExitCode::FAILURE;
-            }
-        }
-        args::Command::Print(args) => {
-            if let Err(e) = print(args) {
-                log::error!("{e}");
-                return std::process::ExitCode::FAILURE;
-            }
-        }
+    if let Err(e) = match args {
+        args::Command::Scan(args) => scan(args),
+        args::Command::Print(args) => print(args),
+        args::Command::Copy(args) => copy(args),
+    } {
+        log::error!("{e}");
+        return std::process::ExitCode::FAILURE;
     }
 
     log::info!("Elapsed: {:?}", start.elapsed());
@@ -116,6 +113,34 @@ fn print(
     }
 
     io::to_stdout(&dirs, show_matched)?;
+
+    Ok(())
+}
+
+fn copy(
+    args::Copy {
+        verbosity: _,
+        reference,
+        derived,
+        target,
+    }: args::Copy,
+) -> Result<(), Error> {
+    log::debug!(
+        "reference: {reference}, derived: {derived}, target: {target}",
+        reference = reference.display(),
+        derived = derived.display(),
+        target = target.display(),
+    );
+
+    let (reference, derived) = dircmp::compare(reference, derived)?;
+
+    let start = std::time::Instant::now();
+    let entries = copy::copy(reference, derived, &target)?;
+    log::info!(
+        "Finished copying {entries} files into {} in {:?}",
+        target.display(),
+        start.elapsed(),
+    );
 
     Ok(())
 }
