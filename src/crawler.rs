@@ -53,42 +53,9 @@ fn accumulate(
     receiver: &std::sync::mpsc::Receiver<worker::Message>,
     base: &std::path::Path,
 ) -> Result<Vec<entry::Entry>, Error> {
-    let mut paths = [
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    ];
+    let mut paths = std::array::from_fn::<Vec<_>, 32, _>(|_| Vec::new());
     let mut total = 0;
-    let mut hashes = 0;
+    let mut hashes = 0_u64;
     let mut done = false;
     let start = std::time::Instant::now();
 
@@ -122,10 +89,9 @@ fn accumulate(
 
         if hashes & (2048 - 1) == 0 {
             let elapsed = start.elapsed().as_secs();
-            if elapsed > 0 {
+            if let Some(rate) = hashes.checked_div(elapsed) {
                 log::debug!(
                     "Indexed {hashes}/{total} [{percentage}%] items at {rate} items/s{scanning}",
-                    rate = hashes / elapsed,
                     percentage = hashes * 100 / total,
                     scanning = if done { "" } else { " (still scanning)" },
                 );
@@ -157,9 +123,6 @@ mod worker {
             Self::Hasher(value)
         }
     }
-
-    #[derive(Debug, thiserror::Error)]
-    pub enum Error {}
 
     pub mod scanner {
         use super::Message as WorkerMessage;
@@ -313,12 +276,14 @@ mod worker {
 
             use md5::Digest;
 
-            let mut file = unwrap!(std::fs::OpenOptions::new()
-                .read(true)
-                .write(false)
-                .create(false)
-                .open(&path)
-                .map_err(|e| Error::CannotOpen(path.clone(), e)));
+            let mut file = unwrap!(
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .create(false)
+                    .open(&path)
+                    .map_err(|e| Error::CannotOpen(path.clone(), e))
+            );
 
             let mut hasher = md5::Md5::new();
             let mut buffer = [0; 1024 * 4];
@@ -326,9 +291,10 @@ mod worker {
             loop {
                 use std::io::Read;
 
-                let bytes = unwrap!(file
-                    .read(&mut buffer)
-                    .map_err(|e| Error::CannotRead(path.clone(), e)));
+                let bytes = unwrap!(
+                    file.read(&mut buffer)
+                        .map_err(|e| Error::CannotRead(path.clone(), e))
+                );
 
                 if bytes == 0 {
                     break;

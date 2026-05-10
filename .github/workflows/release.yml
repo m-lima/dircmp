@@ -1,0 +1,117 @@
+name: Release
+on:
+  push:
+    tags:
+      - v*
+env:
+  CRATE_NAME: dircmp
+  RUSTFLAGS: "-Dwarnings"
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check version
+        run: |
+          version=`cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "${{ env.CRATE_NAME }}") | .version'`
+          version=v"${version}"
+          [ "${version}" ] && [ "${version}" == "${{ github.ref_name }}" ]
+  nix:
+    name: Nix Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Nixify
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check
+        run: nix flake check
+  cargoAll:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Install cargo-hack
+        run: cargo install cargo-hack
+      - name: Check main
+        run: cargo hack --feature-powerset check --verbose --workspace
+      - name: Check tests
+        run: cargo hack --feature-powerset check --verbose --workspace --tests
+      - name: Check examples
+        run: cargo hack --feature-powerset check --verbose --workspace --examples
+      - name: Lint main
+        run: cargo hack --feature-powerset clippy --verbose --workspace -- -W clippy::pedantic
+      - name: Lint tests
+        run: cargo hack --feature-powerset clippy --verbose --workspace --tests -- -W clippy::pedantic
+      - name: Lint examples
+        run: cargo hack --feature-powerset clippy --verbose --workspace --examples -- -W clippy::pedantic
+      - name: Test
+        run: cargo hack --feature-powerset test --verbose --workspace --no-fail-fast
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macOS-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: "cargo build --release --verbose --config 'profile.release.code-gen-units=1' --config 'profile.release.lto=true' --config 'profile.release.strip=true'"
+      - name: Upload asset (UNIX)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: ${{ github.workspace }}/target/release/dircmp
+      - name: Upload asset (WINDOWS)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: ${{ github.workspace }}/target/release/dircmp.exe
+  release:
+    name: Release
+    needs:
+      - nix
+      - cargoAll
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Prepare contents
+        run: |
+          last_tag="$(git describe --tags --abbrev=0 HEAD~1 2> /dev/null || true)"
+          [ "${last_tag}" ] && last_tag="${last_tag}.." || true
+          echo '**Changes since the last release**' > RELEASE_CHANGES
+          git log --format='- %h %s' "${last_tag}${{ github.ref }}" >> RELEASE_CHANGES
+          mv ubuntu-latest/dircmp dircmp-ubuntu
+          mv macOS-latest/dircmp dircmp-macOS
+          mv windows-latest/dircmp.exe dircmp-windows.exe
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          prerelease: false
+          body_path: RELEASE_CHANGES
+          files: |
+            dircmp-ubuntu
+            dircmp-macOS
+            dircmp-windows.exe

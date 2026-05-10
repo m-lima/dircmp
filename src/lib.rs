@@ -14,7 +14,7 @@ pub enum Error {
 }
 
 /// Compares two directories [`left`](std::path::PathBuf) and [`right`](std::path::PathBuf)
-/// returning the [`Directory`](entry::Directory)
+/// returning the [`Directory`]
 ///
 /// # Errors
 ///
